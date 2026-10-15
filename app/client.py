@@ -120,6 +120,10 @@ class Profile:
     # "serper" (the original: direct site fetch + Serper news/competitors) or "jina" (Jina site text plus the
     # vendors' company description only; Serper is never called).
     research_inputs: str = "serper"
+    # research_inputs = "jina_news": Jina multi-page site text (pages chosen by these words, spec order = priority) plus Serper news for the past year.
+    research_page_words: tuple[str, ...] = field(default=())
+    research_max_pages: int = 5
+    research_max_chars: int = 25000
     # [[vertical_defs]] in client.toml: each declared vertical's provider industry labels and keywords, so the
     # waterfall searches exactly those labels (no model guessing, no dependence on AI Ark to measure labels).
     vertical_defs: tuple = field(default=())
@@ -429,6 +433,9 @@ def load(name: str | None = None) -> Profile:
         emailbison_base=cfg.get("emailbison_base"),
         research_fit_gate=bool(cfg.get("research_fit_gate", False)),
         research_inputs=str(cfg.get("research_inputs") or "serper"),
+        research_page_words=tuple(str(w).lower() for w in (cfg.get("research_page_words") or ())),
+        research_max_pages=int(cfg.get("research_max_pages") or 5),
+        research_max_chars=int(cfg.get("research_max_chars") or 25000),
         vertical_defs=tuple(cfg.get("vertical_defs") or ()),
         declared_first=bool(cfg.get("declared_first", False)),
         fit_services=str(cfg.get("fit_services") or ""),

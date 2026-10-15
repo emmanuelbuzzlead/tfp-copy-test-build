@@ -70,6 +70,13 @@ countries = ["US", "CA"]
 # Cheap fit screen (Emmanuel, 2026-10-15): gpt-oss is the ONLY fit judge (Emmanuel: cheaper for the long run). Measured on 112 TFP companies against Sonnet: $0.0002 vs $0.0166 per company, 90 percent agreement, 3 real fits rejected, 8 non-fits passed.
 fit_screen_model = "openai/gpt-oss-120b"
 fit_screen_only = true
+# Research inputs per TFP-COPY-SPEC section 2: Jina home page plus up to 5 internal pages picked by these words (safety, then locations,
+# then products first), capped at 25k characters, plus Serper news for the past year.
+research_inputs = "jina_news"
+research_max_pages = 5
+research_max_chars = 25000
+research_page_words = ["location", "facilit", "plant", "branch", "mill", "about", "safety", "ehs", "sustainab", "esg", "career", "product", "capabilit", "service", "logistic", "shipping", "fleet", "transport"]
+
 
 # TFP verticals, declared (Emmanuel, 2026-10-15: any vertical that ships with flatbeds is fair game; warehousing, construction and
 # defense are open). Labels are QuickEnrich industry names; Lead Ocean uses the same names. The fit gate judges each company's own site.

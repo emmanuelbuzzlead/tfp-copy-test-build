@@ -107,7 +107,24 @@ def _company_inputs(domain: str, company_name: str) -> tuple[str, str, str]:
     if hit is not None:
         return hit
     from .. import client as _client
-    if _client.profile().research_inputs == "jina":
+    if _client.profile().research_inputs == "jina_news":
+        # TFP-COPY-SPEC steps 1: Jina home page plus up to five pages picked by the client's words (safety, locations, products first), and
+        # Serper NEWS for the past year. News is expected to be empty for many mid-market companies; no angle depends on it.
+        from ..clients import jina
+        prof = _client.profile()
+        text = jina.website_text_spec(domain, prof.research_page_words, prof.research_max_pages, prof.research_max_chars)
+        if not text:
+            found = serper.search_by_name(company_name)
+            text = (f"[{domain} has no readable website; found by company name instead]\n{found}" if found else
+                    f"[{domain} has no readable website and nothing else was found. Return null and none for every field.]")
+        try:
+            news = serper.news(company_name, tbs="qdr:y")
+        except serper.SerperUnavailable:
+            raise
+        except Exception:
+            news = "No Google News results found."
+        inputs = (news, "", text)
+    elif _client.profile().research_inputs == "jina":
         # Jina site text + the vendors' company description. Serper is used ONLY when Jina cannot read the
         # site (a dead or blocked domain): a name search, as the original dead-site fallback. Never news or
         # competitor searches for this client.

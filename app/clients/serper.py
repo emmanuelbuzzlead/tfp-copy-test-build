@@ -43,10 +43,10 @@ def _headers() -> dict[str, str]:
     return {"X-API-KEY": settings.serper_api_key, "Content-Type": "application/json"}
 
 
-def news(company: str, limit: int = 10) -> str:
+def news(company: str, limit: int = 10, tbs: str | None = None) -> str:
     try:
         payload = request("serper", "POST", NEWS_URL, headers=_headers(),
-                          json_body={"q": company, "num": limit})
+                          json_body=({"q": company, "num": limit, "tbs": tbs} if tbs else {"q": company, "num": limit}))
     except Exception as exc:
         if _outage(exc):
             raise SerperUnavailable(str(exc)[:200]) from exc

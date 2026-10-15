@@ -57,7 +57,7 @@ PAGE_GROUPS = {
 }
 
 
-def extract_links(markdown: str, domain: str) -> list[tuple[str, str]]:
+def extract_links(markdown: str, domain: str, skip_paths: tuple[str, ...] | None = None) -> list[tuple[str, str]]:
     """[(text, absolute url)] for links on the SAME site, with files, anchors, mail and noise paths removed. Order preserved."""
     base = f"https://{domain}/"
     host = domain.lower().removeprefix("www.")
@@ -70,7 +70,7 @@ def extract_links(markdown: str, domain: str) -> list[tuple[str, str]]:
         p = urlparse(absolute)
         if not p.netloc or p.netloc.lower().removeprefix("www.") != host:
             continue
-        if p.path.lower().endswith(_SKIP_EXT) or any(s in p.path.lower() for s in _SKIP_PATH):
+        if p.path.lower().endswith(_SKIP_EXT) or any(s in p.path.lower() for s in (_SKIP_PATH if skip_paths is None else skip_paths)):
             continue
         key = absolute.rstrip("/")
         if key in seen:
@@ -193,3 +193,66 @@ def website_text_with_pages(domain: str, home_chars: int = 4500, page_chars: int
     if pdf_lines:
         parts.append("\n\nPDF LINKS FOUND ON THE SITE:\n" + "\n".join(pdf_lines[:12]))
     return "".join(parts)
+
+
+# Spec mode (TFP-COPY-SPEC section 2): the pages that matter depend on the client, so the words come from client.toml research_page_words.
+_SPEC_SKIP = tuple(p for p in _SKIP_PATH if p not in ("/careers", "/jobs"))     # the spec reads career pages too
+_SPEC_PRIORITY = (("safety", "ehs", "health", "sustainab", "esg", "csr"), ("location", "facilit", "plant", "branch", "mill", "yard", "terminal"),
+                  ("product", "capabilit", "service", "logistic", "shipping", "fleet", "transport"), ("about", "career", "who we are"))
+
+
+def website_text_spec(domain: str, words: tuple[str, ...], max_pages: int = 5, max_chars: int = 25000) -> str:
+    """Home page plus up to `max_pages` internal pages whose path or link text matches `words`, safety first, then locations, then products,
+    then the rest. Every page is marked '=== PAGE: <url> ===' and lines that repeat across pages (nav, footer) are dropped after their first
+    appearance. Total length is capped at `max_chars`, keeping the home page and the safety, locations and products pages first.
+    Returns "" when the home page cannot be read."""
+    raw = _fetch_url(f"https://{domain}", 80000, links_summary=True)
+    if not raw:
+        return ""
+    body, _, summary = raw.partition("Links/Buttons")
+    links = extract_links(body + "\n" + summary, domain, skip_paths=_SPEC_SKIP)
+    words = tuple(w.lower() for w in words)
+
+    def score(text: str, url: str) -> tuple[int, int]:
+        hay = (text + " " + urlparse(url).path).lower()
+        if urlparse(url).path in ("", "/") or not any(w in hay for w in words):
+            return (99, 0)
+        for rank, group in enumerate(_SPEC_PRIORITY):
+            if any(g in hay for g in group):
+                return (rank, -sum(1 for w in words if w in hay))
+        return (len(_SPEC_PRIORITY), -sum(1 for w in words if w in hay))
+
+    ranked = sorted(((score(t, u), t, u) for t, u in links), key=lambda x: x[0])
+    urls, seen = [], set()
+    for (rank, _n), _t, url in ranked:
+        if rank == 99 or url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+        if len(urls) >= max_pages:
+            break
+    pages: list[tuple[str, str]] = [(f"https://{domain}", body)]
+    if urls:
+        with ThreadPoolExecutor(max_workers=len(urls)) as pool:
+            for url, text in zip(urls, pool.map(lambda u: _fetch_url(u, 60000), urls)):
+                if text:
+                    pages.append((url, text))
+    seen_lines: set[str] = set()
+    out, used = [], 0
+    for url, text in pages:
+        kept = []
+        for line in text.splitlines():
+            key = line.strip()
+            if key and len(key) < 200:
+                if key in seen_lines:
+                    continue
+                seen_lines.add(key)
+            kept.append(line)
+        chunk = f"=== PAGE: {url} ===\n" + "\n".join(kept).strip()
+        room = max_chars - used
+        if room <= 200:
+            break
+        chunk = chunk[:min(len(chunk), room, 9000 if out else 6000)]
+        out.append(chunk)
+        used += len(chunk) + 2
+    return "\n\n".join(out)
