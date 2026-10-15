@@ -83,6 +83,11 @@ async def lifespan(_: FastAPI):
     if settings.pipeline_enabled and settings.database_url:
         threading.Thread(target=_resume_on_boot, daemon=True).start()
         threading.Thread(target=_resume_every_two_hours, daemon=True).start()
+        import os as _os
+        if _os.environ.get("TESTRUN_ENABLED", "").strip().lower() in ("1", "true", "yes"):
+            # The first test run (source, find contacts, write copy, load drafts) runs inside this service and resumes after a redeploy.
+            from . import testrun
+            threading.Thread(target=testrun.run_safe, daemon=True).start()
     yield
 
 

@@ -72,3 +72,16 @@ def test_mx_block_flags_mimecast_and_barracuda_hosts(monkeypatch):
     allowed, blocked = mx_block.split([{"email": "a@acme.com", "company_domain": "acme.com"}, {"email": "b@bar.com", "company_domain": "bar.com"},
                                        {"email": "c@ok.com", "company_domain": "ok.com"}])
     assert [c["email"] for c in allowed] == ["c@ok.com"] and len(blocked) == 2
+
+
+def test_testrun_is_a_web_job_with_resumable_state(monkeypatch):
+    from app import testrun
+    assert testrun.LOCK == "testrun" and callable(testrun.run_safe)
+    monkeypatch.setattr(testrun, "_ensure", lambda: None)
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, *a, **k): self.n = a[0]
+        def fetchone(self): return {"n": 7}
+    monkeypatch.setattr(testrun.db, "cursor", lambda: Cur())
+    assert testrun._bank() == 7
