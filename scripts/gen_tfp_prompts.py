@@ -70,7 +70,7 @@ Email 1 uses the PRIMARY peer, Email 2 uses a DIFFERENT one.
 | logistics_trucking | P3 ADICA | P2 told as a Michigan steel group |
 | warehousing_distribution | P4 Eaton Steel | P3 ADICA |
 | chemicals_industrial | P1 SDI | P4 Eaton Steel |
-| building_materials, construction, other | P1 SDI | P4 Eaton Steel |
+| building_materials, construction, other, and every sector added below (machinery_equipment, food_beverage, wholesale_distribution, mining_energy, defense_aerospace, agriculture_forestry, automotive_transport_equipment, equipment_rental_recycling, consumer_medical_products) | P1 SDI | P4 Eaton Steel |
 There is no customer in construction or building materials: use P1 and say only what P1 says. A10 in multi_site mode always uses P1 as primary. A7 always uses P2 (as a Michigan steel group) as primary."""
 
 SKIP = """SKIP RULE. If the research JSON has news_context.incident_or_osha that is not null, or sector is "other" with data_quality "low", output exactly the one word SKIP and nothing else. Never mention an incident, fall, injury or OSHA event at the prospect's own company."""
@@ -135,7 +135,12 @@ def email2_system(folder: str, title: str) -> str:
 def research_system() -> str:
     i = R.index("The prospect:")
     j = R.index("Extract the fields below.")
-    return (R[:i].rstrip() + "\n\n" + R[j:]).replace("Return JSON only:", "Return JSON only, no prose, no code fence:")
+    out = (R[:i].rstrip() + "\n\n" + R[j:]).replace("Return JSON only:", "Return JSON only, no prose, no code fence:")
+    # The spec's sector list is steel-centric. Measured on 42 real TFP fits (2026-10-15): half came back "other" or an invented label.
+    # TFP's declared verticals are broader, so the enum is widened. Proof choice for the new sectors falls back to P1/P4 (see ROUTING).
+    out = out.replace('"chemicals_industrial","other"]', '"chemicals_industrial","machinery_equipment","food_beverage","wholesale_distribution","mining_energy",'
+                      '"defense_aerospace","agriculture_forestry","automotive_transport_equipment","equipment_rental_recycling","consumer_medical_products","other"]')
+    return out
 
 
 def prompt_file(name, variant, model, temp, tokens, source, system, user) -> str:

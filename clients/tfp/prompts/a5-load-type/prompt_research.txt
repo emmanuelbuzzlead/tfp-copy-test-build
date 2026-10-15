@@ -18,7 +18,7 @@ Extract the fields below. Rules:
 Return JSON only, no prose, no code fence:
 {
   "company_short": "name as a person would say it in conversation",
-  "sector": one of ["steel_producer","metals_service_center","bar_wire_drawn","fabrication_manufacturing","building_materials","construction","logistics_trucking","warehousing_distribution","chemicals_industrial","other"],
+  "sector": one of ["steel_producer","metals_service_center","bar_wire_drawn","fabrication_manufacturing","building_materials","construction","logistics_trucking","warehousing_distribution","chemicals_industrial","machinery_equipment","food_beverage","wholesale_distribution","mining_energy","defense_aerospace","agriculture_forestry","automotive_transport_equipment","equipment_rental_recycling","consumer_medical_products","other"],
   "sector_evidence": "short note",
   "location_count": integer or null,
   "location_count_evidence": "exact phrase or list of sites",
