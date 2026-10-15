@@ -67,8 +67,9 @@ scale_min_days = 7
 # Flight and aviation is shelved. Declared here, never inferred.
 # Countries to source in (Emmanuel, 2026-10-15: TFP is US and Canada).
 countries = ["US", "CA"]
-# Cheap fit screen (Emmanuel, 2026-10-15): gpt-oss rejects first, Sonnet confirms every pass. Measured on 112 TFP companies: $0.0002 vs $0.0166 per company.
+# Cheap fit screen (Emmanuel, 2026-10-15): gpt-oss is the ONLY fit judge (Emmanuel: cheaper for the long run). Measured on 112 TFP companies against Sonnet: $0.0002 vs $0.0166 per company, 90 percent agreement, 3 real fits rejected, 8 non-fits passed.
 fit_screen_model = "openai/gpt-oss-120b"
+fit_screen_only = true
 
 # TFP verticals, declared (Emmanuel, 2026-10-15: any vertical that ships with flatbeds is fair game; warehousing, construction and
 # defense are open). Labels are QuickEnrich industry names; Lead Ocean uses the same names. The fit gate judges each company's own site.

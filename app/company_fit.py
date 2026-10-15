@@ -89,13 +89,18 @@ def _judge(domain: str, name: str, description: str, system: str) -> dict:
     screen = _client.profile().fit_screen_model
     if screen:
         # Cheap first pass: it may only REJECT. A pass (or any failure) goes on to the full model below.
+        only = _client.profile().fit_screen_only
         try:
             first = llm.complete_json(screen, system, user, 0.0, max_tokens=2500, provider="screen")
             if isinstance(first, dict):
                 f1 = str(first.get("fit", "")).upper().replace(" ", "_")
-                if f1 in {"LOW", "NOT_FIT"}:
+                if f1 in {"LOW", "NOT_FIT"} or (only and f1 in {"HIGH", "MEDIUM"}):
                     return {"fit": f1, "reason": ("screen: " + str(first.get("reason", "")))[:300], "vertical": str(first.get("vertical", "none"))}
+            if only:
+                raise RuntimeError("fit screen returned no usable verdict")
         except Exception:
+            if only:
+                raise          # screen-only: a failed check is retried later, it never falls back to the expensive model
             pass
     out = llm.complete_json(MODEL, system, user, 0.0, max_tokens=300, provider="precopy")
     if not isinstance(out, dict):
