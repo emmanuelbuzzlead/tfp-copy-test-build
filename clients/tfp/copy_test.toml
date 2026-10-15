@@ -1,48 +1,41 @@
-# Lumion copy test. Read by app/testgrid.py. PROPOSED by Claude 2026-10-08 from the ProductEVO
-# Wave 1 design; Emmanuel confirms before the first send. Rules are fixed BEFORE the first send
-# and are not changed after data arrives.
-#
-# Design (Emmanuel, 2026-10-08): the engine tests the ANGLE. One campaign per angle, every vertical
-# in every campaign, contacts dealt to the three angles at random and evenly within each segment.
+# TFP copy test (TFP-COPY-SPEC.md angles A4, A5, A7, A10). One campaign per angle, every vertical in every campaign, contacts dealt at random.
+# Campaign 2103 is the model campaign and the first campaign to load into; the other angle campaigns are duplicates of it (see campaigns below).
 
 [angles]
-PDF    = "The PDF Application"
-AFTER5 = "After 5PM"
-START  = "Next Start Date"
+A4  = "Safety Page vs Loading Yard"
+A5  = "Load Type Fit"
+A7  = "Not Your Driver, Still Your Liability"
+A10 = "Peer Proof"
 
-# segment -> the declared verticals that feed it. Grouped so each cell is deep enough to read.
 [segments]
-Tech    = ["Coding and Tech Bootcamps", "Cyber Security Training"]
-Health  = ["Dental Assisting", "Massage Therapy"]
-Trades  = ["Welding and NDT", "HVAC, Plumbing and Electrical", "CDL and Trucking", "Multi-Trade Vocational Schools"]
-Beauty  = ["Cosmetology and Barbering", "Beauty, Wellness and Aesthetics Training"]
-Other   = ["Other Schools and Training Providers"]
-# ProductEVO's own segment for reactivated companies: the fill tags them with this label, so the grid can read them.
-Tier2   = ["Tier 2 - previously emailed"]
+Manufacturing = ["Steel, Metals and Metal Fabrication", "Machinery and Equipment Manufacturing", "General Manufacturing and Industrial Products", "Automotive and Transportation Equipment", "Defense and Aerospace Manufacturing", "Consumer and Medical Products Manufacturing"]
+Materials     = ["Building Materials and Products", "Construction and Infrastructure", "Mining, Oil, Gas and Utilities"]
+Logistics     = ["Trucking and Freight Carriers", "Logistics, Warehousing and 3PL", "Maritime and Rail", "Wholesale and Distribution"]
+Resources     = ["Food and Beverage Production", "Agriculture and Forestry", "Equipment Rental, Recycling and Waste"]
+Other         = ["Other Industrial Shippers"]
+Tier2         = ["Tier 2 - previously emailed"]
 
-# Per-segment leads per angle campaign. PROPOSED: 4 segments x 250 = 1,000 leads per campaign,
-# 3,000 in total. Replace with measured supply once the first sourcing pass reports counts.
 [segment_caps]
-Tech   = 250
-Health = 250
-Trades = 250
-Beauty = 250
-Other  = 250
-Tier2  = 250
+Manufacturing = 250
+Materials     = 250
+Logistics     = 250
+Resources     = 250
+Other         = 250
+Tier2         = 250
 
 [rules]
 per_segment_per_campaign = 250
-freeze_days = 7                   # no edits to copy, list or schedule; monitor only
-decision_day = 10                 # forced decision at day 10 whatever the volume
+freeze_days = 7
+decision_day = 10
 positive_events = ["interested", "booked"]
-random_deal_seed = "lumion-angles-1"
-booked_weight = 3                 # a booked meeting counts as this many positives when ranking
+random_deal_seed = "tfp-angles-1"
+booked_weight = 3
 
-# Which prompt folder writes each angle's copy (clients/lumion/prompts/<folder>).
 [angle_prompts]
-PDF    = "pdf-application"
-AFTER5 = "after-5pm"
-START  = "next-start-date"
+A4  = "a4-safety-page"
+A5  = "a5-load-type"
+A7  = "a7-carrier-liability"
+A10 = "a10-peer-proof"
 
 [scaling]
 champion_topup = 1000
@@ -50,19 +43,14 @@ expand_verticals = 3
 leads_per_new_vertical = 300
 
 [fill]
-# 400 per angle (Emmanuel, 2026-10-09). The reuse supply is about 900 usable leads in total, so the fill will stop short of 1,200 on its own
-# unless new companies are sourced. It also pauses when the shared OpenRouter balance falls under OPENROUTER_MIN_BALANCE_USD (default 15).
-target = 1000
+# Proof run size per angle. Raise only after the sample is approved.
+target = 15
 
 [fit]
 b2b_product_makers = ""
 
-# One line per angle for the Friday one-pager (app/weekly_report.py). The text before the dash is the angle's name.
 [angle_pitch]
-PDF    = "The PDF Application — \"students quit a paper application halfway and nobody ever sees it, here is a mobile one that finishes itself\""
-AFTER5 = "After 5PM — \"people who work days call after your office closes, here is a phone agent that books the callback\""
-START  = "Next Start Date — \"the quickest seats to fill are people who already asked, here is the follow up that reaches them\""
-
-# Self-learning angles are OFF for Lumion. The module's prompts are written for ProductEVO. To turn it on, adapt them first, then:
-# [angle_learning]
-# enabled = true
+A4  = "Safety Page vs Loading Yard: \"your safety page is strong on the floor, the trailer deck is the corner worth checking\""
+A5  = "Load Type Fit: \"what you ship decides where your people stand, here is the system built for that load\""
+A7  = "Carrier Liability: \"it is not your driver, but the claim follows your site\""
+A10 = "Peer Proof: \"a plant like yours already put this on its trailers\""

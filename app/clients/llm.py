@@ -403,6 +403,8 @@ CHAINS = {
     # BuzzLead's own LLM gateway is FIRST on both, as in ProductEVO (8eb7c65): it carries claude-haiku-4-5 and gpt-oss-120b on BuzzLead's
     # accounts, so neither the shared OpenRouter balance nor the shared Concentrate balance is touched while it answers. The old order stays
     # behind it as the fallback. LLM_BUZZLEAD=false turns it off. Emmanuel, 2026-10-15.
+    # fit screen: gpt-oss only. Concentrate would swap in Haiku, which rejects half of the real fits (measured 2026-10-15), so it is not a fallback.
+    "screen": ["buzzlead", "openrouter"],
     "research": ["buzzlead", "openrouter", "concentrate"],
     "copy": ["buzzlead", "concentrate", "openrouter"],
 }

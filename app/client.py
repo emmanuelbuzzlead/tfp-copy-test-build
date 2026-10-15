@@ -95,6 +95,9 @@ class Profile:
     verticals: tuple[str, ...] = field(default=())
     # Countries to source companies and keep contacts in (ISO2). Default US only; TFP is US and Canada (Emmanuel, 2026-10-15).
     countries: tuple[str, ...] = field(default=("US",))
+    # Optional cheap first-pass fit judge (e.g. "openai/gpt-oss-120b" via BuzzLead). It only REJECTS; every company it passes is confirmed by the
+    # full fit model. Measured on 112 TFP companies: 75 times cheaper, agrees with Sonnet 90 percent, but passes 12 percent of Sonnet's rejects.
+    fit_screen_model: str | None = None
     # Opt-in, for two clients that share one pool of firms (ProQ and MasterNow). All
     # default to off, so every other client behaves exactly as before. See
     # app/consultant_gate.py.
@@ -391,6 +394,7 @@ def load(name: str | None = None) -> Profile:
         slack_channel=cfg.get("slack_channel"),
         verticals=tuple(cfg.get("verticals") or ()),
         countries=tuple(str(c).upper() for c in (cfg.get("countries") or ["US"])),
+        fit_screen_model=cfg.get("fit_screen_model") or None,
         model_campaign_id=cfg.get("model_campaign_id"),
         step_wait_days=int(cfg.get("step_wait_days") or 3),
         employee_min=int(cfg.get("employee_min") or 11),

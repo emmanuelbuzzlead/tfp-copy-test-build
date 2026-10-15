@@ -85,6 +85,18 @@ def _judge(domain: str, name: str, description: str, system: str) -> dict:
             # Half of the previous 6000 chars: tested 2026-09-28 against 200 companies,
             # agreed with the full-length read 95% of the time. Troy approved the cut.
             f"WEBSITE TEXT:\n{site[:3000]}")
+    from . import client as _client
+    screen = _client.profile().fit_screen_model
+    if screen:
+        # Cheap first pass: it may only REJECT. A pass (or any failure) goes on to the full model below.
+        try:
+            first = llm.complete_json(screen, system, user, 0.0, max_tokens=2500, provider="screen")
+            if isinstance(first, dict):
+                f1 = str(first.get("fit", "")).upper().replace(" ", "_")
+                if f1 in {"LOW", "NOT_FIT"}:
+                    return {"fit": f1, "reason": ("screen: " + str(first.get("reason", "")))[:300], "vertical": str(first.get("vertical", "none"))}
+        except Exception:
+            pass
     out = llm.complete_json(MODEL, system, user, 0.0, max_tokens=300, provider="precopy")
     if not isinstance(out, dict):
         return {"fit": "MEDIUM", "reason": "unparseable verdict", "vertical": "none"}

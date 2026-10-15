@@ -1,0 +1,31 @@
+# Slack app for Truck Fall Prevention. Create it at api.slack.com/apps -> Create New App -> From a manifest.
+# No secrets in this file. The app talks to exactly one web service: tfp-web (project tfp-vertical-expander).
+# If Slack says "can't translate a manifest", the command name clashes: change /tfp to /tfpx in BOTH the manifest and the Railway variables.
+display_information:
+  name: Vertical Expander (TFP)
+  description: Approve, kill and push Truck Fall Prevention copy-test batches
+features:
+  bot_user:
+    display_name: Vertical Expander TFP
+    always_online: true
+  slash_commands:
+    - command: /tfp
+      url: https://tfp-web-production-3a35.up.railway.app/slack/command
+      description: TFP expander commands
+      usage_hint: approve <batch_id> | kill <batch_id> | status
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - commands
+      - files:write
+      - channels:read
+      - groups:read
+settings:
+  interactivity:
+    is_enabled: true
+    request_url: https://tfp-web-production-3a35.up.railway.app/slack/interact
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

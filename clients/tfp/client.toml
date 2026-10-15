@@ -23,7 +23,7 @@ employee_max = 1000000
 default_mode = "copy-test"
 
 # Arm whose prompts a partial arm inherits. Spec order puts After 5PM first.
-base_variant = "after-5pm"
+base_variant = "a10-peer-proof"
 
 # ProductEVO's rule, verbatim: nobody is contacted again inside 60 days. Past that the tier table decides the order
 # (company_funnel.tier, see app/funnel.py): 1 never contacted, then 2 (over 120 days), 3 (over 90), 4 (over 60).
@@ -46,10 +46,10 @@ reuse_fit_check = true
 # Copy windows from the spec (section 1): the account runs E1 at 380 to 460 and E2 under 700, the
 # pipeline wants E1 300 to 500 and E2 600 to 800. The intersection is used, except that Email 2's floor is 550 (Emmanuel, 2026-10-09):
 # the model lands at 570 to 597 and was rewriting up to seven times to clear 600.
-email1_min_chars = 380
-email1_max_chars = 460
-email2_min_chars = 550
-email2_max_chars = 699
+email1_min_chars = 300
+email1_max_chars = 500
+email2_min_chars = 150
+email2_max_chars = 300
 
 fit_rule = "a US or Canadian company, about 100 or more employees, that operates a plant, yard, warehouse, terminal or supply site where its own people load or unload trucks (flatbed, conestoga or dry van), in any industry. Not a fit: outside US and Canada, government, software and services, retail storefronts, asset-light brokers, terminal-less carriers."
 
@@ -67,6 +67,8 @@ scale_min_days = 7
 # Flight and aviation is shelved. Declared here, never inferred.
 # Countries to source in (Emmanuel, 2026-10-15: TFP is US and Canada).
 countries = ["US", "CA"]
+# Cheap fit screen (Emmanuel, 2026-10-15): gpt-oss rejects first, Sonnet confirms every pass. Measured on 112 TFP companies: $0.0002 vs $0.0166 per company.
+fit_screen_model = "openai/gpt-oss-120b"
 
 # TFP verticals, declared (Emmanuel, 2026-10-15: any vertical that ships with flatbeds is fair game; warehousing, construction and
 # defense are open). Labels are QuickEnrich industry names; Lead Ocean uses the same names. The fit gate judges each company's own site.
@@ -90,18 +92,21 @@ verticals = [
     "Other Industrial Shippers",
 ]
 
-# Angles are pending (Emmanuel is writing them). Placeholder arms so the profile loads; replace before any copy is generated.
 [[copy_variants]]
-name = "angle-1"
-bet = "PLACEHOLDER: Emmanuel is writing the angles"
+name = "a4-safety-page"
+bet = "Safety Page vs Loading Yard"
 
 [[copy_variants]]
-name = "angle-2"
-bet = "PLACEHOLDER: Emmanuel is writing the angles"
+name = "a5-load-type"
+bet = "Load Type Fit"
 
 [[copy_variants]]
-name = "angle-3"
-bet = "PLACEHOLDER: Emmanuel is writing the angles"
+name = "a7-carrier-liability"
+bet = "Not Your Driver, Still Your Liability"
+
+[[copy_variants]]
+name = "a10-peer-proof"
+bet = "Peer Proof"
 
 [[vertical_defs]]
 name = "Steel, Metals and Metal Fabrication"
