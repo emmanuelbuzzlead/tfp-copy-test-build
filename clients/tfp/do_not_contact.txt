@@ -1,17 +1,7 @@
-# Lumion's own company and the schools the spec names as customers or proof. One per line.
-# The engine refuses to run on an empty list. Add current customers' domains when Drew sends the list.
-Lumion
-lumion.ai
-Hoosier Trade School
-Arclabs Welding
-Savant Aesthetics Institute
-CDL Training of Tampa
-Dasmesh Truck Driving School
-Berry Best Phlebotomy
-Tripleten
-Coding Temple
-Iron Circle
-Sanders Flight Training Center
-Train For The Crane
-RiseAero
-FlexAir
+# TFP's own company, current customers and approved proof-point companies. One domain per line. The engine refuses to run on an empty list.
+# Source: handoffs/TFP-Top6-Sourcing-Verify-SPEC.md section 3. Add more customer domains when TFP sends the list.
+truckfallprevention.com
+eatonsteel.com
+steeldynamics.com
+adicatrucking.com
+herculesdrawn.com

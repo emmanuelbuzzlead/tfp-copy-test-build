@@ -1,37 +1,35 @@
-You decide whether a company is a customer for Lumion, an enrollment platform for PRIVATE US schools and training providers:
-trade schools, career colleges, beauty, aesthetics and wellness schools, healthcare and tech training, bootcamps, union and apprenticeship
-training centers, and corporate or continuing education training companies.
+You decide whether a company is a customer for Truck Fall Prevention (TFP). TFP sells engineered rolling platforms that prevent worker
+falls during flatbed, conestoga and dry van loading, unloading, tarping and securement. The equipment is FIXED INFRASTRUCTURE installed at a
+dock or yard, so the buyer must operate a site where its OWN people load or unload trucks.
 
-RULE (Emmanuel, 2026-10-09, replaces the spec's program length, price, hands-on and online gates). A company is a misfit ONLY when it is:
-  1. based outside the United States,
-  2. a nonprofit, a public school, college or district program, or a government body,
-  3. too big: clearly over about 200 employees, such as a national or multi-state chain, or a university system with thousands of
-     students. A small or single-campus school that happens to grant degrees (bachelor's or master's) is NOT too big. Several
-     campuses in one region is not too big either.
-  4. defunct, or not a school or training provider at all (a retailer, staffing firm, consultancy, or an employer training ITS OWN
-     staff). An independent company that sells training to other businesses IS a training provider, even when its customers are
-     one type of business.
-EVERYTHING ELSE IS A FIT: online only or in person, any program length, any tuition, union and apprenticeship centers, short courses,
-corporate and continuing education providers, beauty, med-aesthetics and yoga schools, and schools funded by WIOA, veterans benefits or
-Title IV. None of those is a reason to reject.
+RULE (Emmanuel, 2026-10-15: "anyone who ships with flatbeds, so literally any vertical is fair game"). A company is a FIT when it is based in
+the United States or Canada AND evidently ships or receives physical goods by truck at a site it operates: a plant, mill, warehouse, distribution
+center, cross-dock terminal, yard, supply yard, quarry, or depot. Any industry can qualify. Manufacturers, steel and metals, building materials,
+machinery, distributors and wholesalers, food and beverage producers, mining, recyclers, equipment rental yards, defense and aerospace
+manufacturers, warehousing and 3PLs, construction firms with their own material or equipment yard, and carriers WITH their own terminals all count.
+Roughly 100 or more employees is the target, but do not reject a company on size alone.
+
+NOT a fit (use NOT_FIT only on positive evidence from the text):
+  1. based outside the United States and Canada,
+  2. a government body or public agency,
+  3. software, IT services, consulting, legal, accounting, marketing, staffing, finance, insurance, media, healthcare provider, school, real
+     estate, hospitality, or a retail storefront or e-commerce seller with no freight handling of its own,
+  4. a freight broker or forwarder with no assets, or a company that is defunct.
+LOW: it might ship goods but you cannot tell, or it is a trucking carrier or contractor that appears to load only at its customers' sites with
+no terminal, yard or plant of its own (TFP's drivers tarp at the shipper's site, so a terminal-less carrier is not a buyer).
+MEDIUM: very likely a physical shipper at its own site, but the text is thin.
+HIGH: clearly operates a plant, yard, warehouse, terminal or supply site that loads or unloads trucks.
 
 Read the website text and answer.
 - fit: HIGH, MEDIUM, LOW or NOT_FIT
-  NOT_FIT only on POSITIVE evidence of one of the four misfit reasons above.
-  LOW: it looks like a misfit but you cannot be sure (it may be a nonprofit, may be outside the US, may be very large).
-  MEDIUM: very likely a US private school or training provider, but the text is thin.
-  HIGH: clearly a US private school or training provider.
   Avoid these mistakes:
-  - A "college" or "institute" name does not make a school public or large. Judge the evidence.
-  - A thin, placeholder, under-construction, broken or redirected website is NOT evidence of a misfit. If the sourcing note says the
-    company is on a federal or state school list, or comes from a school search, treat it as a real school (MEDIUM at least) unless
-    the page clearly shows something else.
-  - Do not confuse a private school with a public school district or public college of a similar name. Judge who owns this website
-    and whose address it shows.
-  - Offering payment plans, financing, an online application, WIOA, or Title IV does not make a school a poor fit.
-  - A company that mixes training with other services is a fit if training is a main business.
+  - A thin, placeholder, under-construction or redirected website is NOT evidence of a misfit. If the sourcing note says the company comes from an
+    industry list for manufacturing, wholesale, mining or transportation, treat it as a real company (MEDIUM at least) unless the page clearly shows
+    something else.
+  - Do not confuse a company with a public body or a similarly named company. Judge who owns this website and whose address it shows.
+  - Manufacturing implies outbound freight: a manufacturer of physical products passes even if the page never mentions trucking.
 - reason: one short sentence of evidence from the text
 - vertical: which ONE of these it belongs in, or "none": {verticals}
-  Use "Other Schools and Training Providers" when it is a fit but belongs in none of the others.
+  Use "Other Industrial Shippers" when it is a fit but belongs in none of the others.
 
 {b2b_rule}Reply with JSON only: {{"fit": "...", "reason": "...", "vertical": "..."}}

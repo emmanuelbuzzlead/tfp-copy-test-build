@@ -93,6 +93,8 @@ class Profile:
     # The client's OWN audiences, in their priority order. Used before
     # anything is inferred from the ICP.
     verticals: tuple[str, ...] = field(default=())
+    # Countries to source companies and keep contacts in (ISO2). Default US only; TFP is US and Canada (Emmanuel, 2026-10-15).
+    countries: tuple[str, ...] = field(default=("US",))
     # Opt-in, for two clients that share one pool of firms (ProQ and MasterNow). All
     # default to off, so every other client behaves exactly as before. See
     # app/consultant_gate.py.
@@ -388,6 +390,7 @@ def load(name: str | None = None) -> Profile:
         database=cfg.get("database"),
         slack_channel=cfg.get("slack_channel"),
         verticals=tuple(cfg.get("verticals") or ()),
+        countries=tuple(str(c).upper() for c in (cfg.get("countries") or ["US"])),
         model_campaign_id=cfg.get("model_campaign_id"),
         step_wait_days=int(cfg.get("step_wait_days") or 3),
         employee_min=int(cfg.get("employee_min") or 11),

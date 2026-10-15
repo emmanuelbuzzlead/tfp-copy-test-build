@@ -125,7 +125,13 @@ def is_us(contact: "Contact") -> bool:
     country parameter (verified: identical totals with country/location set), so the
     filter is local, on the company country code the row carries. A blank code is kept:
     the company itself was already US-filtered at sourcing."""
-    return not contact.country_code or contact.country_code in US_CODES
+    if not contact.country_code or contact.country_code in US_CODES:
+        return True
+    try:
+        from .. import client as _client
+        return contact.country_code in {"CAN" if c == "CA" else c for c in _client.profile().countries} | set(_client.profile().countries)
+    except Exception:
+        return False
 
 
 def _rows(payload) -> list[dict]:
@@ -350,7 +356,12 @@ def find_companies(industries: list[str] | None = None, employee_min: int | None
     unfiltered query would page the whole dataset."""
     mapped_ind = map_industries(industries or [])
     ranges = map_employee_range(employee_min, employee_max)
-    payload: dict[str, Any] = {"country_code": {"include": ["US"], "exclude": []}}
+    try:
+        from .. import client as _client
+        countries = list(_client.profile().countries) or ["US"]
+    except Exception:
+        countries = ["US"]
+    payload: dict[str, Any] = {"country_code": {"include": countries, "exclude": []}}
     if mapped_ind:
         payload["industry"] = {"include": mapped_ind, "exclude": []}
     if ranges:

@@ -18,8 +18,8 @@ model_campaign_id = 2103
 step_wait_days = 3
 
 # ICP (spec section 2): 11 to 200 employees, US.
-employee_min = 11
-employee_max = 200
+employee_min = 100
+employee_max = 1000000
 default_mode = "copy-test"
 
 # Arm whose prompts a partial arm inherits. Spec order puts After 5PM first.
@@ -41,7 +41,7 @@ include_wins = true
 
 # The fit gate runs on NEW companies when they are sourced, not on companies we have already contacted (Emmanuel, 2026-10-09):
 # their supply is limited and a gate that rejects about 40% of it would deplete it for no gain.
-reuse_fit_check = false
+reuse_fit_check = true
 
 # Copy windows from the spec (section 1): the account runs E1 at 380 to 460 and E2 under 700, the
 # pipeline wants E1 300 to 500 and E2 600 to 800. The intersection is used, except that Email 2's floor is 550 (Emmanuel, 2026-10-09):
@@ -51,7 +51,7 @@ email1_max_chars = 460
 email2_min_chars = 550
 email2_max_chars = 699
 
-fit_rule = "a private US school or training provider (trade, career, beauty, aesthetics, wellness, healthcare, tech, union or corporate training) that is not a nonprofit, public or government body, not outside the United States and not too big"
+fit_rule = "a US or Canadian company, about 100 or more employees, that operates a plant, yard, warehouse, terminal or supply site where its own people load or unload trucks (flatbed, conestoga or dry van), in any industry. Not a fit: outside US and Canada, government, software and services, retail storefronts, asset-light brokers, terminal-less carriers."
 
 # Scale / kill bar. PROVISIONAL: the spec says Lumion's baseline is not in the project files.
 # Replace with the measured baseline from prospects/lumion-outreach-audit/refresh-20261008.
@@ -65,88 +65,126 @@ scale_min_days = 7
 # Lumion's own vertical priority, by win rate (spec section 2, 1,512 deals, March 2026).
 # Tier A: Coding, Cyber, Dental. Tier B: Welding, HVAC, Massage. Tier C: CDL, Cosmetology.
 # Flight and aviation is shelved. Declared here, never inferred.
+# Countries to source in (Emmanuel, 2026-10-15: TFP is US and Canada).
+countries = ["US", "CA"]
+
+# TFP verticals, declared (Emmanuel, 2026-10-15: any vertical that ships with flatbeds is fair game; warehousing, construction and
+# defense are open). Labels are QuickEnrich industry names; Lead Ocean uses the same names. The fit gate judges each company's own site.
 verticals = [
-    "Coding and Tech Bootcamps",
-    "Cyber Security Training",
-    "Dental Assisting",
-    "Welding and NDT",
-    "HVAC, Plumbing and Electrical",
-    "Massage Therapy",
-    "CDL and Trucking",
-    "Cosmetology and Barbering",
-    "Multi-Trade Vocational Schools",
-    "Beauty, Wellness and Aesthetics Training",
-    "Other Schools and Training Providers",
+    "Steel, Metals and Metal Fabrication",
+    "Machinery and Equipment Manufacturing",
+    "Building Materials and Products",
+    "General Manufacturing and Industrial Products",
+    "Automotive and Transportation Equipment",
+    "Trucking and Freight Carriers",
+    "Logistics, Warehousing and 3PL",
+    "Maritime and Rail",
+    "Wholesale and Distribution",
+    "Construction and Infrastructure",
+    "Defense and Aerospace Manufacturing",
+    "Mining, Oil, Gas and Utilities",
+    "Food and Beverage Production",
+    "Agriculture and Forestry",
+    "Equipment Rental, Recycling and Waste",
+    "Consumer and Medical Products Manufacturing",
+    "Other Industrial Shippers",
 ]
 
-# The three arms under test. One angle per campaign, all verticals in each (copy_test.toml).
+# Angles are pending (Emmanuel is writing them). Placeholder arms so the profile loads; replace before any copy is generated.
 [[copy_variants]]
-name = "pdf-application"
-bet = "Naming the PDF application on their own site earns more replies than a general speed claim"
-
-[[copy_variants]]
-name = "after-5pm"
-bet = "A school's own posted closing time makes the missed after-hours call real to the owner"
+name = "angle-1"
+bet = "PLACEHOLDER: Emmanuel is writing the angles"
 
 [[copy_variants]]
-name = "next-start-date"
-bet = "A named class and start date turns a vague follow-up promise into a deadline"
+name = "angle-2"
+bet = "PLACEHOLDER: Emmanuel is writing the angles"
 
-# Declared provider labels per vertical (QuickEnrich and Lead Ocean use the same names, verified
-# 2026-10-08). The waterfall searches exactly these. The labels are broad, so the keywords carry the
-# vertical and the website fit check (fit_prompt.txt) removes colleges and public programs.
-
-[[vertical_defs]]
-name = "Coding and Tech Bootcamps"
-industries = ["Professional Training and Coaching", "IT System Training and Support", "Technical and Vocational Training", "E-Learning Providers"]
-keywords = ["coding bootcamp", "software bootcamp", "web development bootcamp", "data bootcamp", "tech career school"]
+[[copy_variants]]
+name = "angle-3"
+bet = "PLACEHOLDER: Emmanuel is writing the angles"
 
 [[vertical_defs]]
-name = "Cyber Security Training"
-industries = ["Professional Training and Coaching", "IT System Training and Support", "Technical and Vocational Training"]
-keywords = ["cyber security bootcamp", "cybersecurity training", "network security training", "ethical hacking training"]
+name = "Steel, Metals and Metal Fabrication"
+industries = ["Primary Metal Manufacturing", "Fabricated Metal Products", "Architectural and Structural Metal Manufacturing", "Metal Treatments", "Wholesale Metals and Minerals", "Metalworking Machinery Manufacturing"]
+keywords = ["steel", "metal fabrication", "structural steel", "steel service center", "wire and cable", "metal products"]
 
 [[vertical_defs]]
-name = "Dental Assisting"
-industries = ["Technical and Vocational Training", "Professional Training and Coaching"]
-keywords = ["dental assisting school", "dental assistant program", "dental career school"]
+name = "Machinery and Equipment Manufacturing"
+industries = ["Machinery Manufacturing", "Industrial Machinery Manufacturing", "Automation Machinery Manufacturing", "Agriculture, Construction, Mining Machinery Manufacturing", "Commercial and Service Industry Machinery Manufacturing", "Appliances, Electrical, and Electronics Manufacturing"]
+keywords = ["machinery", "industrial equipment", "heavy equipment", "equipment manufacturer"]
 
 [[vertical_defs]]
-name = "Welding and NDT"
-industries = ["Technical and Vocational Training"]
-keywords = ["welding school", "welding training", "NDT training", "commercial diving school", "pipe welding"]
+name = "Building Materials and Products"
+industries = ["Building Materials", "Wholesale Building Materials", "Wood Product Manufacturing", "Glass, Ceramics and Concrete Manufacturing", "Construction Hardware Manufacturing", "Paper and Forest Product Manufacturing", "Retail Building Materials and Garden Equipment"]
+keywords = ["lumber", "building products", "roofing", "drywall", "precast concrete", "supply yard", "millwork", "plywood"]
 
 [[vertical_defs]]
-name = "HVAC, Plumbing and Electrical"
-industries = ["Technical and Vocational Training"]
-keywords = ["HVAC school", "HVAC training", "plumbing school", "electrician school", "trade school"]
+name = "General Manufacturing and Industrial Products"
+industries = ["Manufacturing", "Plastics Manufacturing", "Chemical Manufacturing", "Packaging and Containers Manufacturing", "Furniture and Home Furnishings Manufacturing", "Textile Manufacturing"]
+keywords = ["manufacturer", "industrial products", "plastic products", "packaging manufacturer"]
 
 [[vertical_defs]]
-name = "Massage Therapy"
-industries = ["Technical and Vocational Training", "Professional Training and Coaching"]
-keywords = ["massage therapy school", "massage school", "bodywork school"]
+name = "Automotive and Transportation Equipment"
+industries = ["Motor Vehicle Manufacturing", "Motor Vehicle Parts Manufacturing", "Railroad Equipment Manufacturing", "Transportation Equipment Manufacturing", "Shipbuilding"]
+keywords = ["auto parts", "trailer manufacturer", "truck bodies", "vehicle manufacturer"]
 
 [[vertical_defs]]
-name = "CDL and Trucking"
-industries = ["Technical and Vocational Training", "Truck Transportation"]
-keywords = ["CDL school", "truck driving school", "commercial driver training", "CDL training"]
+name = "Trucking and Freight Carriers"
+industries = ["Truck Transportation", "Freight and Package Transportation"]
+keywords = ["flatbed", "trucking company", "freight carrier", "LTL carrier"]
 
 [[vertical_defs]]
-name = "Cosmetology and Barbering"
-industries = ["Cosmetology and Barber Schools", "Technical and Vocational Training"]
-keywords = ["cosmetology school", "barber school", "beauty school", "esthetics school", "tattoo apprenticeship"]
+name = "Logistics, Warehousing and 3PL"
+industries = ["Transportation, Logistics, Supply Chain and Storage", "Warehousing and Storage"]
+keywords = ["warehouse", "distribution center", "third party logistics", "cross dock", "fulfillment"]
 
 [[vertical_defs]]
-name = "Multi-Trade Vocational Schools"
-industries = ["Technical and Vocational Training"]
-keywords = ["vocational school", "career college", "multi trade school", "skilled trades school", "career training school"]
+name = "Maritime and Rail"
+industries = ["Maritime Transportation", "Rail Transportation"]
+keywords = ["port terminal", "rail yard", "intermodal", "marine terminal"]
 
 [[vertical_defs]]
-name = "Beauty, Wellness and Aesthetics Training"
-industries = ["Cosmetology and Barber Schools", "Professional Training and Coaching", "Technical and Vocational Training"]
-keywords = ["medical aesthetics training", "esthetician school", "yoga teacher training", "spa training", "makeup artistry school", "nail school", "lash training"]
+name = "Wholesale and Distribution"
+industries = ["Wholesale", "Wholesale Import and Export", "Wholesale Recyclable Materials", "Wholesale Paper Products"]
+keywords = ["industrial distributor", "wholesale distributor", "supply house"]
 
 [[vertical_defs]]
-name = "Other Schools and Training Providers"
-industries = ["Technical and Vocational Training", "Professional Training and Coaching", "IT System Training and Support"]
-keywords = ["career training", "vocational training", "certification training", "apprenticeship training center", "healthcare training school", "career college"]
+name = "Construction and Infrastructure"
+industries = ["Construction", "Civil Engineering", "Highway, Street, and Bridge Construction", "Nonresidential Building Construction"]
+keywords = ["general contractor", "infrastructure construction", "equipment yard", "precast"]
+
+[[vertical_defs]]
+name = "Defense and Aerospace Manufacturing"
+industries = ["Defense and Space Manufacturing", "Aviation and Aerospace Component Manufacturing"]
+keywords = ["defense contractor", "aerospace manufacturer", "aircraft components"]
+
+[[vertical_defs]]
+name = "Mining, Oil, Gas and Utilities"
+industries = ["Mining", "Oil and Gas", "Metal Ore Mining", "Nonmetallic Mineral Mining", "Utilities"]
+keywords = ["quarry", "aggregates", "oilfield supply", "pipe yard", "utility poles"]
+
+[[vertical_defs]]
+name = "Food and Beverage Production"
+industries = ["Food and Beverage Manufacturing", "Food Production", "Beverage Manufacturing", "Dairy Product Manufacturing", "Meat Products Manufacturing"]
+keywords = ["food manufacturer", "beverage producer", "bottling", "food processing"]
+
+[[vertical_defs]]
+name = "Agriculture and Forestry"
+industries = ["Farming", "Farming, Ranching, Forestry", "Forestry and Logging", "Agricultural Chemical Manufacturing"]
+keywords = ["grain", "fertilizer", "sawmill", "timber"]
+
+[[vertical_defs]]
+name = "Equipment Rental, Recycling and Waste"
+industries = ["Commercial and Industrial Equipment Rental", "Waste Collection", "Waste Treatment and Disposal"]
+keywords = ["equipment rental", "scrap metal", "recycling", "waste hauler"]
+
+[[vertical_defs]]
+name = "Consumer and Medical Products Manufacturing"
+industries = ["Medical Equipment Manufacturing", "Pharmaceutical Manufacturing", "Personal Care Product Manufacturing", "Sporting Goods Manufacturing", "Computers and Electronics Manufacturing"]
+keywords = ["consumer products manufacturer", "medical supplies manufacturer"]
+
+[[vertical_defs]]
+name = "Other Industrial Shippers"
+industries = ["Manufacturing"]
+keywords = ["industrial", "fabrication", "distribution"]
+

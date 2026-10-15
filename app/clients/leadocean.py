@@ -81,7 +81,25 @@ def find_companies(industries: list[str] | None = None, employee_min: int | None
     mapped = map_industries(industries or [])
     if industries and not mapped:
         return []
-    params: dict[str, Any] = {"hqCountry": "US"}
+    try:
+        from .. import client as _client
+        countries = list(_client.profile().countries) or ["US"]
+    except Exception:
+        countries = ["US"]
+    if len(countries) > 1:
+        # One country per request in this API: split the limit and merge, de-duplicated by domain.
+        merged: list[dict] = []
+        seen_d: set[str] = set()
+        for c in countries:
+            for rec in _find_companies_in(c, mapped, employee_min, employee_max, max(1, limit // len(countries))):
+                if rec["domain"] not in seen_d:
+                    seen_d.add(rec["domain"]); merged.append(rec)
+        return merged[:limit]
+    return _find_companies_in(countries[0], mapped, employee_min, employee_max, limit)
+
+
+def _find_companies_in(country: str, mapped: list[str], employee_min: int | None, employee_max: int | None, limit: int) -> list[dict]:
+    params: dict[str, Any] = {"hqCountry": country}
     if mapped:
         params["industry"] = mapped
     if employee_min is not None:

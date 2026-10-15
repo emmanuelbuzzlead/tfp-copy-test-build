@@ -1,25 +1,35 @@
-# Buyer titles for Lumion, best first (Emmanuel, 2026-10-08). Same list for every school size.
-# A title that CONTAINS one of these (whole words, any order) is a buyer even when it also carries
-# a word the exclusion list bans, for example "Owner / Lead Instructor".
-Owner
-Operator
-Founder
-School Director
-Campus Director
-Director of Admissions
-Admissions Director
-Director of Enrollment
-Enrollment Director
-Enrollment Manager
-Admissions Manager
-Enrollment Coordinator
-Admissions Coordinator
-Program Director
-Finance Director
-Director of Financial Aid
-Financial Aid Director
-Business Manager
-Operations Manager
-Director of Student Services
-Student Success Manager
-Marketing Director
+# Buyer titles for Truck Fall Prevention, best first (from the TFP playbook and scripts/tfp/logistics_classify_and_validate.py, 2026-10-15).
+# ENTERPRISE titles come first (Director and VP), then SINGLE_SITE titles (Manager, Coordinator and site roles). A title that CONTAINS one of
+# these (whole words, any order) is a buyer even when it also carries a word the exclusion list bans.
+Director of EHS
+EHS Director
+Corporate EHS Director
+Director of Risk Management
+VP of Safety
+Vice President of Safety
+VP of Operations
+Safety Director
+Director of Safety
+Director of Operations
+Director of Fleet
+Director of Transportation
+Director of Logistics
+EHS Manager
+Safety Manager
+Plant Manager
+Facility Manager
+Terminal Manager
+Warehouse Manager
+Distribution Center Manager
+Yard Manager
+Dock Manager
+Transportation Manager
+Fleet Manager
+Logistics Manager
+DOT Compliance Manager
+Safety Coordinator
+EHS Coordinator
+Safety Supervisor
+Safety Specialist
+EHS Specialist
+Safety Engineer
