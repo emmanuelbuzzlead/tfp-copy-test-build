@@ -57,21 +57,17 @@ def test_tfp_hard_rules_are_switched_on_and_company_is_three_words():
     assert lead["custom_fields"]["COMPANY"] == "ALG Worldwide Logistics" or len(lead["custom_fields"]["COMPANY"].split()) <= 3
 
 
-def test_mx_block_flags_mimecast_and_barracuda_hosts(monkeypatch):
-    from app import mx_block
-    monkeypatch.setattr(mx_block, "_ensure", lambda: None)
-    class FakeCur:
+def test_mx_filter_drops_gateway_contacts_before_copy(monkeypatch):
+    from app import mx, wave1_fill
+    monkeypatch.setattr(mx, "blocked", lambda d: "mimecast" if d == "acme.com" else None)
+    class Cur:
         def __enter__(self): return self
         def __exit__(self, *a): return False
-        def execute(self, *a, **k): pass
-        def fetchone(self): return None
-    monkeypatch.setattr(mx_block.db, "cursor", lambda: FakeCur())
-    mx_block._mem.clear()
-    hosts = {"acme.com": ["us-smtp-inbound-1.mimecast.com"], "bar.com": ["d1.bnet.cudasvc.com"], "ok.com": ["aspmx.l.google.com"]}
-    monkeypatch.setattr(mx_block, "_mx_hosts", lambda d: hosts[d])
-    allowed, blocked = mx_block.split([{"email": "a@acme.com", "company_domain": "acme.com"}, {"email": "b@bar.com", "company_domain": "bar.com"},
-                                       {"email": "c@ok.com", "company_domain": "ok.com"}])
-    assert [c["email"] for c in allowed] == ["c@ok.com"] and len(blocked) == 2
+        def executemany(self, *a, **k): pass
+    monkeypatch.setattr(wave1_fill.db, "cursor", lambda: Cur())
+    monkeypatch.setattr(wave1_fill.db, "log", lambda *a, **k: None)
+    keep = wave1_fill.mx_filter([{"email": "a@acme.com", "company_domain": "acme.com"}, {"email": "c@ok.com", "company_domain": "ok.com"}], "r1")
+    assert [c["email"] for c in keep] == ["c@ok.com"]
 
 
 def test_testrun_is_a_web_job_with_resumable_state(monkeypatch):

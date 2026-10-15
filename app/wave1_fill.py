@@ -287,12 +287,26 @@ def fit_check_unjudged_reuse_companies(recontact_days: int, run_id: str, batch_s
 
 
 def mx_filter(batch: list[dict], run_id: str) -> list[dict]:
-    """TFP hard rule: drop contacts behind Mimecast or Barracuda (by MX record) BEFORE any copy is written for them."""
-    from . import client
+    """TFP hard rule: drop contacts behind Mimecast or Barracuda (by MX record) BEFORE any copy is written for them.
+    Uses the engine's own gateway check (app/mx.py, BLOCKED_MAIL_GATEWAYS, cached 30 days). Contacts found through stage 4 were already checked
+    at company entry; this covers people who arrive another way (the reuse queue, saved copy, the bank)."""
+    from . import client, mx
     if not client.profile().mx_blocklist or not batch:
         return batch
-    from . import mx_block
-    allowed, blocked = mx_block.split(batch)
+    verdict: dict[str, str | None] = {}
+
+    def gate(c: dict) -> str | None:
+        dom = ((c.get("email") or "").split("@")[-1] or c.get("company_domain") or "").lower()
+        if dom not in verdict:
+            try:
+                verdict[dom] = mx.blocked(dom)
+            except Exception:
+                verdict[dom] = None
+        return verdict[dom]
+
+    allowed, blocked = [], []
+    for c in batch:
+        (blocked if gate(c) else allowed).append(c)
     if blocked:
         with db.cursor() as cur:
             cur.executemany("UPDATE contacts SET status='needs_review', eb_campaign_id=NULL, drop_reason=%s WHERE email=%s",
