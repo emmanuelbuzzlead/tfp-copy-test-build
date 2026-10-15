@@ -1,0 +1,68 @@
+# Lumion copy test. Read by app/testgrid.py. PROPOSED by Claude 2026-10-08 from the ProductEVO
+# Wave 1 design; Emmanuel confirms before the first send. Rules are fixed BEFORE the first send
+# and are not changed after data arrives.
+#
+# Design (Emmanuel, 2026-10-08): the engine tests the ANGLE. One campaign per angle, every vertical
+# in every campaign, contacts dealt to the three angles at random and evenly within each segment.
+
+[angles]
+PDF    = "The PDF Application"
+AFTER5 = "After 5PM"
+START  = "Next Start Date"
+
+# segment -> the declared verticals that feed it. Grouped so each cell is deep enough to read.
+[segments]
+Tech    = ["Coding and Tech Bootcamps", "Cyber Security Training"]
+Health  = ["Dental Assisting", "Massage Therapy"]
+Trades  = ["Welding and NDT", "HVAC, Plumbing and Electrical", "CDL and Trucking", "Multi-Trade Vocational Schools"]
+Beauty  = ["Cosmetology and Barbering", "Beauty, Wellness and Aesthetics Training"]
+Other   = ["Other Schools and Training Providers"]
+# ProductEVO's own segment for reactivated companies: the fill tags them with this label, so the grid can read them.
+Tier2   = ["Tier 2 - previously emailed"]
+
+# Per-segment leads per angle campaign. PROPOSED: 4 segments x 250 = 1,000 leads per campaign,
+# 3,000 in total. Replace with measured supply once the first sourcing pass reports counts.
+[segment_caps]
+Tech   = 250
+Health = 250
+Trades = 250
+Beauty = 250
+Other  = 250
+Tier2  = 250
+
+[rules]
+per_segment_per_campaign = 250
+freeze_days = 7                   # no edits to copy, list or schedule; monitor only
+decision_day = 10                 # forced decision at day 10 whatever the volume
+positive_events = ["interested", "booked"]
+random_deal_seed = "lumion-angles-1"
+booked_weight = 3                 # a booked meeting counts as this many positives when ranking
+
+# Which prompt folder writes each angle's copy (clients/lumion/prompts/<folder>).
+[angle_prompts]
+PDF    = "pdf-application"
+AFTER5 = "after-5pm"
+START  = "next-start-date"
+
+[scaling]
+champion_topup = 1000
+expand_verticals = 3
+leads_per_new_vertical = 300
+
+[fill]
+# 400 per angle (Emmanuel, 2026-10-09). The reuse supply is about 900 usable leads in total, so the fill will stop short of 1,200 on its own
+# unless new companies are sourced. It also pauses when the shared OpenRouter balance falls under OPENROUTER_MIN_BALANCE_USD (default 15).
+target = 1000
+
+[fit]
+b2b_product_makers = ""
+
+# One line per angle for the Friday one-pager (app/weekly_report.py). The text before the dash is the angle's name.
+[angle_pitch]
+PDF    = "The PDF Application — \"students quit a paper application halfway and nobody ever sees it, here is a mobile one that finishes itself\""
+AFTER5 = "After 5PM — \"people who work days call after your office closes, here is a phone agent that books the callback\""
+START  = "Next Start Date — \"the quickest seats to fill are people who already asked, here is the follow up that reaches them\""
+
+# Self-learning angles are OFF for Lumion. The module's prompts are written for ProductEVO. To turn it on, adapt them first, then:
+# [angle_learning]
+# enabled = true

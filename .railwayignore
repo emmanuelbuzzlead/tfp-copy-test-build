@@ -1,0 +1,22 @@
+# Keeps run logs, caches and research samples out of the deployed image.
+#
+# NOTHING under clients/ may ever be excluded. A blanket "*.md" here on 2026-09-16 cut
+# every client's pitch.md, icp.md and exclusions.md out of the image, so the running
+# service fell back to another client's positioning and refused to send -- correctly,
+# but only because the profile guard caught it. Patterns are anchored to the repo root
+# for that reason: a bare "*.md" matches at every depth.
+/log-*.json
+/stage3_cache_*.json
+/measured_*.json
+/one_vertical_result_*.json
+/seeds_interested.json
+/gated_verticals.json
+/research_*.txt
+/.backfill-progress.json
+
+# Root documentation only. Never clients/**/*.md.
+/README.md
+/SPEC.md
+/DEPLOY.md
+/buzzlead-api-live.md
+/buzzlead-api-reference (1).md

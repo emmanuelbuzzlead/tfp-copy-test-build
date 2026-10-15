@@ -1,0 +1,10 @@
+# Pinned 2026-09-07. psycopg >=3.2.10 is the first release with binary wheels for
+# Python 3.14, which is what this machine runs; the Railway image should match.
+psycopg[binary]==3.3.5
+httpx==0.28.1
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.17
+python-dotenv==1.0.1
+dnspython==2.7.0
+fpdf2==2.8.1

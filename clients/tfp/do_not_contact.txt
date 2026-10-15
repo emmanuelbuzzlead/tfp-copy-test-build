@@ -1,0 +1,17 @@
+# Lumion's own company and the schools the spec names as customers or proof. One per line.
+# The engine refuses to run on an empty list. Add current customers' domains when Drew sends the list.
+Lumion
+lumion.ai
+Hoosier Trade School
+Arclabs Welding
+Savant Aesthetics Institute
+CDL Training of Tampa
+Dasmesh Truck Driving School
+Berry Best Phlebotomy
+Tripleten
+Coding Temple
+Iron Circle
+Sanders Flight Training Center
+Train For The Crane
+RiseAero
+FlexAir

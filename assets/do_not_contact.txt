@@ -1,0 +1,1 @@
+# Legacy fallback list, emptied for the ProQ/MasterNow build. Each client has its own do_not_contact.txt.

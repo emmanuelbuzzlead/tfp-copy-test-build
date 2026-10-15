@@ -1,0 +1,152 @@
+display_name = "Truck Fall Prevention"
+
+# EmailBison workspace 37 "Lumion" on the personal host. Key follows the client, never the deploy.
+workspace_id = 93
+emailbison_base = "https://personal.buzzlead.io"
+emailbison_key_env = "EMAILBISON_API_KEY_TFP"
+
+# TO CONFIRM with Emmanuel: the Slack channel the Lumion approval app posts into.
+slack_channel = "#tfp-expander"
+
+# Its own database on the shared Postgres server.
+database = "tfp"
+
+# Template: campaign 1888 "QuickEnrich Decision makers RERUN | Oct 5th", read 2026-10-08. Active,
+# plain text, 3 steps, no variants. Step 1 carries PERSONALIZATION 1 and step 2 carries
+# PERSONALIZATION 2. Campaigns 1991 and 1804 have plain text OFF and were skipped.
+model_campaign_id = 2103
+step_wait_days = 3
+
+# ICP (spec section 2): 11 to 200 employees, US.
+employee_min = 11
+employee_max = 200
+default_mode = "copy-test"
+
+# Arm whose prompts a partial arm inherits. Spec order puts After 5PM first.
+base_variant = "after-5pm"
+
+# ProductEVO's rule, verbatim: nobody is contacted again inside 60 days. Past that the tier table decides the order
+# (company_funnel.tier, see app/funnel.py): 1 never contacted, then 2 (over 120 days), 3 (over 90), 4 (over 60).
+recontact_days = 60
+
+# Owner and operator first, then admissions and enrollment leaders (titles.txt order). Spec first
+# run used 3 contacts per domain; raise to 5 for the scale run.
+contacts_per_company = 5
+verify_pool_per_company = 6
+title_strategy = "ordered"
+use_leadocean = true
+
+# Spec 3.3: a title containing a buyer title is kept even if it also carries an excluded word.
+include_wins = true
+
+# The fit gate runs on NEW companies when they are sourced, not on companies we have already contacted (Emmanuel, 2026-10-09):
+# their supply is limited and a gate that rejects about 40% of it would deplete it for no gain.
+reuse_fit_check = false
+
+# Copy windows from the spec (section 1): the account runs E1 at 380 to 460 and E2 under 700, the
+# pipeline wants E1 300 to 500 and E2 600 to 800. The intersection is used, except that Email 2's floor is 550 (Emmanuel, 2026-10-09):
+# the model lands at 570 to 597 and was rewriting up to seven times to clear 600.
+email1_min_chars = 380
+email1_max_chars = 460
+email2_min_chars = 550
+email2_max_chars = 699
+
+fit_rule = "a private US school or training provider (trade, career, beauty, aesthetics, wellness, healthcare, tech, union or corporate training) that is not a nonprofit, public or government body, not outside the United States and not too big"
+
+# Scale / kill bar. PROVISIONAL: the spec says Lumion's baseline is not in the project files.
+# Replace with the measured baseline from prospects/lumion-outreach-audit/refresh-20261008.
+# These MUST sit above any [[table]]: TOML puts a key after a table header inside that table.
+scale_metric = "of_replies"
+scale_rate = 0.05
+scale_min_sends = 500
+scale_min_replies = 30
+scale_min_days = 7
+
+# Lumion's own vertical priority, by win rate (spec section 2, 1,512 deals, March 2026).
+# Tier A: Coding, Cyber, Dental. Tier B: Welding, HVAC, Massage. Tier C: CDL, Cosmetology.
+# Flight and aviation is shelved. Declared here, never inferred.
+verticals = [
+    "Coding and Tech Bootcamps",
+    "Cyber Security Training",
+    "Dental Assisting",
+    "Welding and NDT",
+    "HVAC, Plumbing and Electrical",
+    "Massage Therapy",
+    "CDL and Trucking",
+    "Cosmetology and Barbering",
+    "Multi-Trade Vocational Schools",
+    "Beauty, Wellness and Aesthetics Training",
+    "Other Schools and Training Providers",
+]
+
+# The three arms under test. One angle per campaign, all verticals in each (copy_test.toml).
+[[copy_variants]]
+name = "pdf-application"
+bet = "Naming the PDF application on their own site earns more replies than a general speed claim"
+
+[[copy_variants]]
+name = "after-5pm"
+bet = "A school's own posted closing time makes the missed after-hours call real to the owner"
+
+[[copy_variants]]
+name = "next-start-date"
+bet = "A named class and start date turns a vague follow-up promise into a deadline"
+
+# Declared provider labels per vertical (QuickEnrich and Lead Ocean use the same names, verified
+# 2026-10-08). The waterfall searches exactly these. The labels are broad, so the keywords carry the
+# vertical and the website fit check (fit_prompt.txt) removes colleges and public programs.
+
+[[vertical_defs]]
+name = "Coding and Tech Bootcamps"
+industries = ["Professional Training and Coaching", "IT System Training and Support", "Technical and Vocational Training", "E-Learning Providers"]
+keywords = ["coding bootcamp", "software bootcamp", "web development bootcamp", "data bootcamp", "tech career school"]
+
+[[vertical_defs]]
+name = "Cyber Security Training"
+industries = ["Professional Training and Coaching", "IT System Training and Support", "Technical and Vocational Training"]
+keywords = ["cyber security bootcamp", "cybersecurity training", "network security training", "ethical hacking training"]
+
+[[vertical_defs]]
+name = "Dental Assisting"
+industries = ["Technical and Vocational Training", "Professional Training and Coaching"]
+keywords = ["dental assisting school", "dental assistant program", "dental career school"]
+
+[[vertical_defs]]
+name = "Welding and NDT"
+industries = ["Technical and Vocational Training"]
+keywords = ["welding school", "welding training", "NDT training", "commercial diving school", "pipe welding"]
+
+[[vertical_defs]]
+name = "HVAC, Plumbing and Electrical"
+industries = ["Technical and Vocational Training"]
+keywords = ["HVAC school", "HVAC training", "plumbing school", "electrician school", "trade school"]
+
+[[vertical_defs]]
+name = "Massage Therapy"
+industries = ["Technical and Vocational Training", "Professional Training and Coaching"]
+keywords = ["massage therapy school", "massage school", "bodywork school"]
+
+[[vertical_defs]]
+name = "CDL and Trucking"
+industries = ["Technical and Vocational Training", "Truck Transportation"]
+keywords = ["CDL school", "truck driving school", "commercial driver training", "CDL training"]
+
+[[vertical_defs]]
+name = "Cosmetology and Barbering"
+industries = ["Cosmetology and Barber Schools", "Technical and Vocational Training"]
+keywords = ["cosmetology school", "barber school", "beauty school", "esthetics school", "tattoo apprenticeship"]
+
+[[vertical_defs]]
+name = "Multi-Trade Vocational Schools"
+industries = ["Technical and Vocational Training"]
+keywords = ["vocational school", "career college", "multi trade school", "skilled trades school", "career training school"]
+
+[[vertical_defs]]
+name = "Beauty, Wellness and Aesthetics Training"
+industries = ["Cosmetology and Barber Schools", "Professional Training and Coaching", "Technical and Vocational Training"]
+keywords = ["medical aesthetics training", "esthetician school", "yoga teacher training", "spa training", "makeup artistry school", "nail school", "lash training"]
+
+[[vertical_defs]]
+name = "Other Schools and Training Providers"
+industries = ["Technical and Vocational Training", "Professional Training and Coaching", "IT System Training and Support"]
+keywords = ["career training", "vocational training", "certification training", "apprenticeship training center", "healthcare training school", "career college"]

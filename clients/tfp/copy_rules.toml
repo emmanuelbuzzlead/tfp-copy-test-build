@@ -1,0 +1,59 @@
+# Lumion's own copy bans (LUMION-SPEC.md section 6.5, "Client specific bans" and the guardrail block).
+# They are ADDED to the shared floor in app/validator.py, which already rejects em and en dashes,
+# greetings, sign-offs, markdown, preambles and character counts. Literal strings avoid backslash escapes.
+
+[[banned]]
+name = "no dash characters: spaced hyphen or double hyphen"
+pattern = '\s-\s|--'
+
+[[banned]]
+name = "no pricing, packages or commercial terms"
+pattern = '\$\s?\d|\b(pricing|prices?|packages?|per month|per student|monthly fee|fees?)\b'
+
+[[banned]]
+name = "no case study numbers or percentages"
+pattern = '\d\s?%|\bpercent\b|\b\d+x\b|\b\d[\d,.]*\s?(students|enrollments|seats|leads|inquiries)\b'
+
+[[banned]]
+name = "no loss framing"
+pattern = '\bstop losing\b|\bstop leaving\b|\bstop wasting\b|\blosing (students|seats|enrollments?|leads)\b'
+
+[[banned]]
+name = "no competitor names"
+pattern = '\b(HubSpot|Salesforce|TFC|Total Finance)\b'
+
+[[banned]]
+name = "retired jargon"
+pattern = '\b(platform|solutions?|ecosystem|seamless(ly)?|ai-powered|end-to-end|funnel optimization)\b'
+
+[[banned]]
+name = "guardrail banned vocabulary"
+pattern = 'hope this finds you well|just checking in|i wanted to reach out|quick call|hop on a call|\bleverage\b|\boptimi[sz]e\b|\bstreamline\b|\bsynergy\b|pain points|value proposition|best practices|best-in-class|cutting-edge|just following up|circling back|bumping this|trusted by|limited time|\b10x\b|skyrocket|\btransform\b'
+
+[[banned]]
+name = "banned opener: Most X generalization or statistic opener"
+pattern = '\A\s*(most\b|industry-wide|\d)'
+
+[[banned]]
+name = "no colon in the opening line"
+pattern = '\A[^\n]{0,200}:'
+
+[[banned]]
+name = "a closing question must end with a question mark"
+pattern = 'first 30 days looked like[^?\n]*\.\s*\Z'
+
+# Never name a school or customer (Emmanuel, 2026-10-09): the CTA refers to a similar school by type.
+[[banned]]
+name = "never name a customer school"
+pattern = '\b(Hoosier Trade|Arclabs|Savant Aesthetics|CDL Training of Tampa|Dasmesh|Berry Best|Tripleten|Coding Temple|Iron Circle|Sanders Flight|Train For The Crane|RiseAero|FlexAir|Mach 1|Elite Career Institute)\b'
+
+# Exactly one CTA per email, the first-30-days question, on every arm.
+[[required_for_variant]]
+name = "email must carry the first 30 days question"
+pattern = 'first 30 days'
+variants = ["pdf-application", "after-5pm", "next-start-date"]
+
+[[required_for_variant]]
+name = "the CTA must refer to a similar school type or to a school doing your volume"
+pattern = 'similar|doing your volume'
+variants = ["pdf-application", "after-5pm", "next-start-date"]

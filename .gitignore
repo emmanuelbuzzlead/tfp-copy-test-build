@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+*-emailbison.csv
+.pytest_cache/
+.env.local

@@ -1,0 +1,25 @@
+# Buyer titles for Lumion, best first (Emmanuel, 2026-10-08). Same list for every school size.
+# A title that CONTAINS one of these (whole words, any order) is a buyer even when it also carries
+# a word the exclusion list bans, for example "Owner / Lead Instructor".
+Owner
+Operator
+Founder
+School Director
+Campus Director
+Director of Admissions
+Admissions Director
+Director of Enrollment
+Enrollment Director
+Enrollment Manager
+Admissions Manager
+Enrollment Coordinator
+Admissions Coordinator
+Program Director
+Finance Director
+Director of Financial Aid
+Financial Aid Director
+Business Manager
+Operations Manager
+Director of Student Services
+Student Success Manager
+Marketing Director
