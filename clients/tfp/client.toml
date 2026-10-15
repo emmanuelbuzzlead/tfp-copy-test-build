@@ -76,6 +76,14 @@ research_inputs = "jina_news"
 research_max_pages = 5
 research_max_chars = 25000
 research_page_words = ["location", "facilit", "plant", "branch", "mill", "about", "safety", "ehs", "sustainab", "esg", "career", "product", "capabilit", "service", "logistic", "shipping", "fleet", "transport"]
+# Google searches per company (Serper web search, Emmanuel 2026-10-15): snippets go next to the news and same-site hits are read with Jina.
+# 1 and 2 find the safety and locations pages the link walk missed; 3 feeds the incident guard (an OSHA or fatality hit means SKIP).
+research_search_fetch = 2
+research_search_queries = [
+    'site:{domain} (safety OR EHS OR "zero harm" OR "target zero" OR "safety program")',
+    'site:{domain} (locations OR facilities OR plants OR terminals OR yards)',
+    '"{company}" (OSHA citation OR fatality OR "fall from" OR injured)',
+]
 
 
 # TFP verticals, declared (Emmanuel, 2026-10-15: any vertical that ships with flatbeds is fair game; warehousing, construction and

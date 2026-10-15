@@ -101,6 +101,34 @@ def _site_or_fallback(domain: str, company_name: str) -> str:
             f"from, use the fallback rule in your instructions.]")
 
 
+def _search_inputs(prof, domain: str, company_name: str, site_text: str) -> tuple[str, str]:
+    """Google search for facts the site's link structure did not surface (a safety program page, a named location list).
+    Returns (result lines, extra pages): the snippets go next to the news, and the best same-site hits not already read are fetched with Jina."""
+    from ..clients import jina
+    if not prof.research_search_queries:
+        return "", ""
+    lines, urls, seen_links = [], [], set()
+    for tpl in prof.research_search_queries:
+        q = tpl.replace("{domain}", domain).replace("{company}", company_name)
+        for hit in serper.web(q, 5):
+            if hit["link"] in seen_links:
+                continue
+            seen_links.add(hit["link"])
+            lines.append(f"- {hit['title']} | {hit['link']}\n  {hit['snippet']}")
+            if domain in hit["link"] and hit["link"] not in site_text and not hit["link"].lower().endswith(".pdf"):
+                urls.append(hit["link"])
+    extra, room = [], max(prof.research_max_chars - len(site_text), 0)
+    for u in urls[:prof.research_search_fetch]:
+        if room < 300:
+            break
+        t = jina._fetch_url(u, 6000)
+        if t:
+            chunk = f"=== PAGE: {u} (found by Google search) ===\n" + t[:min(6000, room)]
+            extra.append(chunk)
+            room -= len(chunk)
+    return "\n".join(lines[:10]), "\n\n".join(extra)
+
+
 def _company_inputs(domain: str, company_name: str) -> tuple[str, str, str]:
     with _research_lock:
         hit = _company_research.get(domain)
@@ -123,6 +151,11 @@ def _company_inputs(domain: str, company_name: str) -> tuple[str, str, str]:
             raise
         except Exception:
             news = "No Google News results found."
+        found_lines, extra_pages = _search_inputs(prof, domain, company_name, text)
+        if found_lines:
+            news = news + "\n\nGOOGLE SEARCH RESULTS:\n" + found_lines
+        if extra_pages:
+            text = text + "\n\n" + extra_pages
         inputs = (news, "", text)
     elif _client.profile().research_inputs == "jina":
         # Jina site text + the vendors' company description. Serper is used ONLY when Jina cannot read the

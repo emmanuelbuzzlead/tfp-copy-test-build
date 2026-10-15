@@ -124,6 +124,9 @@ class Profile:
     research_page_words: tuple[str, ...] = field(default=())
     research_max_pages: int = 5
     research_max_chars: int = 25000
+    # Google searches run for each company in "jina_news" mode; {domain} and {company} are filled in. Same-site hits not already read are fetched.
+    research_search_queries: tuple[str, ...] = field(default=())
+    research_search_fetch: int = 2
     # [[vertical_defs]] in client.toml: each declared vertical's provider industry labels and keywords, so the
     # waterfall searches exactly those labels (no model guessing, no dependence on AI Ark to measure labels).
     vertical_defs: tuple = field(default=())
@@ -436,6 +439,8 @@ def load(name: str | None = None) -> Profile:
         research_page_words=tuple(str(w).lower() for w in (cfg.get("research_page_words") or ())),
         research_max_pages=int(cfg.get("research_max_pages") or 5),
         research_max_chars=int(cfg.get("research_max_chars") or 25000),
+        research_search_queries=tuple(str(q) for q in (cfg.get("research_search_queries") or ())),
+        research_search_fetch=int(cfg.get("research_search_fetch") if cfg.get("research_search_fetch") is not None else 2),
         vertical_defs=tuple(cfg.get("vertical_defs") or ()),
         declared_first=bool(cfg.get("declared_first", False)),
         fit_services=str(cfg.get("fit_services") or ""),

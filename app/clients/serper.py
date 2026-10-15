@@ -112,6 +112,18 @@ def _scrape_via_serper(url: str) -> str:
         return ""
 
 
+def web(q: str, limit: int = 5) -> list[dict]:
+    """Plain Google search, organic results only: [{title, link, snippet}]. Empty list on any failure except an outage."""
+    try:
+        payload = request("serper", "POST", SEARCH_URL, headers=_headers(), json_body={"q": q, "num": limit})
+    except Exception as exc:
+        if _outage(exc):
+            raise SerperUnavailable(str(exc)[:200]) from exc
+        return []
+    return [{"title": (i.get("title") or "").strip(), "link": i.get("link") or "", "snippet": (i.get("snippet") or "").strip()}
+            for i in (payload or {}).get("organic", [])[:limit] if i.get("link")]
+
+
 def search_by_name(company: str, extra_terms: str = "", limit: int = 6) -> str:
     """A general web search for the company BY NAME, for when its own site is dead.
 
