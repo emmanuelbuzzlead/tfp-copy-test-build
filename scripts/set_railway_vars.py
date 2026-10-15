@@ -19,7 +19,7 @@ ENV = Path("C:/Claude_Code_GTM_Training/.env")
 SERVICE = "tfp-web"
 if "--service" in __import__("sys").argv:
     SERVICE = __import__("sys").argv[__import__("sys").argv.index("--service") + 1]
-PUBLIC_URL = "https://tfp-web-production.up.railway.app"
+PUBLIC_URL = "https://tfp-web-production-3a35.up.railway.app"
 
 # Copied from the root .env, by name.
 FROM_ENV = [
@@ -36,7 +36,7 @@ FIXED = {
     "CLIENT": "tfp",
     "DATABASE_URL": "${{Postgres.DATABASE_URL}}",
     "PUBLIC_URL": PUBLIC_URL,
-    "PIPELINE_ENABLED": "true",     # the kill switch; the guards below keep the proof phase small and unable to send
+    "PIPELINE_ENABLED": "false",     # the kill switch; the guards below keep the proof phase small and unable to send
     "BUZZLEAD_ENABLED": "false",
     "AUTO_START_CAMPAIGNS": "false",
     "SKIP_SENDER_ATTACH": "true",
