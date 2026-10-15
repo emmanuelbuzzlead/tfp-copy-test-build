@@ -6,7 +6,7 @@ so the router's eligibility and proof choice move INTO the prompts (sector to pe
   1. The model campaign (2103) prints "Hi {FIRST_NAME} - " before PERSONALIZATION 1 and 2, so bodies do NOT start with the first name. No subject is generated
      (the sequence has its own spintax subject).
   2. P7 INEOS Composites is dropped from the proof library: standing TFP rule, forbidden proof point (memory tfp-vertical-playbook). Confirm with Emmanuel.
-  3. ALLOW_NAMED_INCIDENT stays false (spec default): the Eaton fall is told as "a Michigan steel group", enforced in copy_rules.toml.
+  3. ALLOW_NAMED_INCIDENT is TRUE (Emmanuel, 2026-10-15): Eaton Steel and the $1.4M may be named.
   4. Output is the email body only (the engine takes plain text), not JSON.
 Run from the repo root:  python scripts/gen_tfp_prompts.py
 """
@@ -23,7 +23,6 @@ RESEARCH_MODEL = "openai/gpt-oss-120b"
 EMAIL_MODEL = "anthropic/claude-haiku-4.5"
 
 ANGLES = {   # folder -> (engine key, title, angle marker in the spec block)
-    "a4-safety-page": ("A4", "Safety Page vs Loading Yard", 'angle "Safety Page vs Loading Yard"'),
     "a5-load-type": ("A5", "Load Type Fit", 'angle "Load Type Fit"'),
     "a7-carrier-liability": ("A7", "Not Your Driver, Still Your Liability", 'angle "Not Your Driver, Still Your Liability"'),
     "a10-peer-proof": ("A10", "Peer Proof", 'angle "Peer Proof"'),
@@ -57,21 +56,21 @@ SYSTEM_MAP = table_after("### Load type to system map (A5)")
 # P7 (INEOS Composites) removed, see the module docstring.
 PROOFS = re.sub(r"\nP7:\n(?:  .*\n?)+", "\n", PROOFS)
 PROOFS = PROOFS.replace("  config_flag: ALLOW_NAMED_INCIDENT   # if false, say \"a Michigan steel group\" instead of Eaton",
-                        "  rule: ALLOW_NAMED_INCIDENT is FALSE. Tell this story as \"a Michigan steel group\" or \"a Michigan steel plant\". Never write Eaton or ADICA next to the fall or the settlement.")
+                        "  rule: ALLOW_NAMED_INCIDENT is TRUE (Emmanuel, 2026-10-15). You may name Eaton Steel and ADICA and the 1.4 million dollar settlement; write the number as $1.4M.")
 
 ROUTING = """PROOF CHOICE (you pick it from the research JSON field "sector"; the proofs below are the ONLY claims you may make).
 Email 1 uses the PRIMARY peer, Email 2 uses a DIFFERENT one.
 | sector | primary peer | secondary |
 |---|---|---|
-| steel_producer | P1 SDI | P2 told as a Michigan steel group |
+| steel_producer | P1 SDI | P2 Eaton Steel / ADICA story |
 | metals_service_center | P4 Eaton Steel | P1 SDI |
 | bar_wire_drawn | P5 Hercules Drawn Steel | P4 Eaton Steel |
 | fabrication_manufacturing | P6 United Alloy | P5 Hercules |
-| logistics_trucking | P3 ADICA | P2 told as a Michigan steel group |
+| logistics_trucking | P3 ADICA | P2 Eaton Steel / ADICA story |
 | warehousing_distribution | P4 Eaton Steel | P3 ADICA |
 | chemicals_industrial | P1 SDI | P4 Eaton Steel |
 | building_materials, construction, other, and every sector added below (machinery_equipment, food_beverage, wholesale_distribution, mining_energy, defense_aerospace, agriculture_forestry, automotive_transport_equipment, equipment_rental_recycling, consumer_medical_products) | P1 SDI | P4 Eaton Steel |
-There is no customer in construction or building materials: use P1 and say only what P1 says. A10 in multi_site mode always uses P1 as primary. A7 always uses P2 (as a Michigan steel group) as primary."""
+There is no customer in construction or building materials: use P1 and say only what P1 says. A10 in multi_site mode always uses P1 as primary. A7 always uses P2  as primary."""
 
 SKIP = """SKIP RULE. If the research JSON has news_context.incident_or_osha that is not null, or sector is "other" with data_quality "low", output exactly the one word SKIP and nothing else. Never mention an incident, fall, injury or OSHA event at the prospect's own company."""
 
@@ -205,8 +204,6 @@ rules = [
     ("no dollar figures other than the settlement story", r"\$\s?(?!1\.4M)\d"),
     ("no percentages", r"\d\s?%"),
     ("FORBIDDEN proof point: INEOS", r"(?i)\bINEOS\b"),
-    ("never name Eaton or ADICA next to the fall or the settlement (ALLOW_NAMED_INCIDENT is false)",
-     r"(?is)(Eaton|ADICA)[^.\n]*(1\.4|settle|fell|fall)|(1\.4M?|settle)[^.\n]*(Eaton|ADICA)"),
     ("never name Russel Metals", r"(?i)\bRussel"),
     ("no ALL CAPS shouting", r"(?-i:\b[A-Z]{5,}\b)"),
 ]
@@ -217,11 +214,11 @@ for name, pat in rules:
 (OUT / "copy_rules.toml").write_text("\n".join(body), encoding="utf-8")
 
 # ---- copy test ----
-test = '''# TFP copy test (TFP-COPY-SPEC.md angles A4, A5, A7, A10). One campaign per angle, every vertical in every campaign, contacts dealt at random.
-# Campaign 2103 is the model campaign and the first campaign to load into; the other angle campaigns are duplicates of it (see campaigns below).
+test = '''# TFP copy test (TFP-COPY-SPEC.md angles A5, A7, A10; A4 dropped 2026-10-15, only 27 percent of fits have any safety hook and about half of those are noise).
+# One campaign per angle, every vertical in every campaign, contacts dealt at random. Campaign 2103 is the model campaign and carries A5; the A7 and A10
+# campaigns are duplicates of it.
 
 [angles]
-A4  = "Safety Page vs Loading Yard"
 A5  = "Load Type Fit"
 A7  = "Not Your Driver, Still Your Liability"
 A10 = "Peer Proof"
@@ -251,7 +248,6 @@ random_deal_seed = "tfp-angles-1"
 booked_weight = 3
 
 [angle_prompts]
-A4  = "a4-safety-page"
 A5  = "a5-load-type"
 A7  = "a7-carrier-liability"
 A10 = "a10-peer-proof"
@@ -269,7 +265,6 @@ target = 15
 b2b_product_makers = ""
 
 [angle_pitch]
-A4  = "Safety Page vs Loading Yard: \\"your safety page is strong on the floor, the trailer deck is the corner worth checking\\""
 A5  = "Load Type Fit: \\"what you ship decides where your people stand, here is the system built for that load\\""
 A7  = "Carrier Liability: \\"it is not your driver, but the claim follows your site\\""
 A10 = "Peer Proof: \\"a plant like yours already put this on its trailers\\""

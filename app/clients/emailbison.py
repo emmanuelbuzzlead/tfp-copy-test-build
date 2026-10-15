@@ -143,6 +143,14 @@ def _lead_payload(contact: dict) -> dict:
     PERSONALIZATION 1/2 are the merge variables the Clay copy maps into (spec Stage 5
     step 9), carried as custom fields so variant-level reporting works.
     """
+    custom_company: dict = {}
+    try:
+        from .. import client as _client
+        if _client.profile().company_custom_field:
+            from ..company_name_cleaner import clean_company_name
+            custom_company = {"COMPANY": clean_company_name(contact.get("company_name") or contact.get("company_domain") or "")}
+    except Exception:
+        custom_company = {}
     return {
         "email": contact["email"],
         "first_name": contact.get("first_name") or "",
@@ -150,6 +158,7 @@ def _lead_payload(contact: dict) -> dict:
         "company_name": contact.get("company_name") or "",
         "website": contact.get("company_domain") or "",
         "custom_fields": {
+            **custom_company,
             "title": contact.get("title") or "",
             "PERSONALIZATION 1": contact.get("personalization_1") or "",
             "PERSONALIZATION 2": contact.get("personalization_2") or "",

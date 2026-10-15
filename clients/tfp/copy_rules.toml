@@ -42,10 +42,6 @@ name = "FORBIDDEN proof point: INEOS"
 pattern = '(?i)\bINEOS\b'
 
 [[banned]]
-name = "never name Eaton or ADICA next to the fall or the settlement (ALLOW_NAMED_INCIDENT is false)"
-pattern = '(?is)(Eaton|ADICA)[^.\n]*(1\.4|settle|fell|fall)|(1\.4M?|settle)[^.\n]*(Eaton|ADICA)'
-
-[[banned]]
 name = "never name Russel Metals"
 pattern = '(?i)\bRussel'
 

@@ -286,6 +286,21 @@ def fit_check_unjudged_reuse_companies(recontact_days: int, run_id: str, batch_s
     return won
 
 
+def mx_filter(batch: list[dict], run_id: str) -> list[dict]:
+    """TFP hard rule: drop contacts behind Mimecast or Barracuda (by MX record) BEFORE any copy is written for them."""
+    from . import client
+    if not client.profile().mx_blocklist or not batch:
+        return batch
+    from . import mx_block
+    allowed, blocked = mx_block.split(batch)
+    if blocked:
+        with db.cursor() as cur:
+            cur.executemany("UPDATE contacts SET status='needs_review', eb_campaign_id=NULL, drop_reason=%s WHERE email=%s",
+                            [("behind Mimecast or Barracuda (MX check, hard TFP rule)", c["email"]) for c in blocked])
+        db.log(run_id, "wave1_fill", f"MX blocklist: {len(blocked)} of {len(batch)} contacts are behind Mimecast or Barracuda and were dropped")
+    return allowed
+
+
 def fit_filter(batch: list[dict], run_id: str) -> list[dict]:
     """Keep only contacts whose company passes the website fit check."""
     if not _reuse_fit_check():
@@ -459,7 +474,7 @@ def fill(post: bool = True) -> dict:
             if passes(r["copy_variant"], r["first_name"], r["personalization_1"], r["personalization_2"]):
                 by_angle[angle_of_variant[r["copy_variant"]]].append(r)
         for a, rows in by_angle.items():
-            load_for(a, fit_filter(rows, run_id))
+            load_for(a, mx_filter(fit_filter(rows, run_id), run_id))
 
         # tier-2 queue: people EmailBison already holds, one angle per company
         # never-contacted first (Troy's order): tier-1 contacts already found and verified,
@@ -558,6 +573,7 @@ def fill(post: bool = True) -> dict:
                 batch += queue[a][:n]
                 queue[a] = queue[a][n:]
             batch = fit_filter(batch, run_id)
+            batch = mx_filter(batch, run_id)
             if not batch:
                 continue
             # Emmanuel, 2026-10-10: "scrap the reverifier so leads can just flow in." These people were already emailed from this

@@ -35,15 +35,15 @@ PROOF CHOICE (you pick it from the research JSON field "sector"; the proofs belo
 Email 1 uses the PRIMARY peer, Email 2 uses a DIFFERENT one.
 | sector | primary peer | secondary |
 |---|---|---|
-| steel_producer | P1 SDI | P2 told as a Michigan steel group |
+| steel_producer | P1 SDI | P2 Eaton Steel / ADICA story |
 | metals_service_center | P4 Eaton Steel | P1 SDI |
 | bar_wire_drawn | P5 Hercules Drawn Steel | P4 Eaton Steel |
 | fabrication_manufacturing | P6 United Alloy | P5 Hercules |
-| logistics_trucking | P3 ADICA | P2 told as a Michigan steel group |
+| logistics_trucking | P3 ADICA | P2 Eaton Steel / ADICA story |
 | warehousing_distribution | P4 Eaton Steel | P3 ADICA |
 | chemicals_industrial | P1 SDI | P4 Eaton Steel |
 | building_materials, construction, other, and every sector added below (machinery_equipment, food_beverage, wholesale_distribution, mining_energy, defense_aerospace, agriculture_forestry, automotive_transport_equipment, equipment_rental_recycling, consumer_medical_products) | P1 SDI | P4 Eaton Steel |
-There is no customer in construction or building materials: use P1 and say only what P1 says. A10 in multi_site mode always uses P1 as primary. A7 always uses P2 (as a Michigan steel group) as primary.
+There is no customer in construction or building materials: use P1 and say only what P1 says. A10 in multi_site mode always uses P1 as primary. A7 always uses P2  as primary.
 
 PRODUCT_FACTS and PROOF (the only claims you may make)
 P1:
@@ -58,7 +58,7 @@ P1:
 
 P2:
   name: Eaton Steel / ADICA origin story
-  rule: ALLOW_NAMED_INCIDENT is FALSE. Tell this story as "a Michigan steel group" or "a Michigan steel plant". Never write Eaton or ADICA next to the fall or the settlement.
+  rule: ALLOW_NAMED_INCIDENT is TRUE (Emmanuel, 2026-10-15). You may name Eaton Steel and ADICA and the 1.4 million dollar settlement; write the number as $1.4M.
   claims:
     - A driver for a contracted carrier fell off a flatbed at one of Eaton Steel's plants.
     - The fall cost the parent company of ADICA Trucking a 1.4 million dollar settlement.

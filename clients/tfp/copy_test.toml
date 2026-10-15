@@ -1,8 +1,8 @@
-# TFP copy test (TFP-COPY-SPEC.md angles A4, A5, A7, A10). One campaign per angle, every vertical in every campaign, contacts dealt at random.
-# Campaign 2103 is the model campaign and the first campaign to load into; the other angle campaigns are duplicates of it (see campaigns below).
+# TFP copy test (TFP-COPY-SPEC.md angles A5, A7, A10; A4 dropped 2026-10-15, only 27 percent of fits have any safety hook and about half of those are noise).
+# One campaign per angle, every vertical in every campaign, contacts dealt at random. Campaign 2103 is the model campaign and carries A5; the A7 and A10
+# campaigns are duplicates of it.
 
 [angles]
-A4  = "Safety Page vs Loading Yard"
 A5  = "Load Type Fit"
 A7  = "Not Your Driver, Still Your Liability"
 A10 = "Peer Proof"
@@ -32,7 +32,6 @@ random_deal_seed = "tfp-angles-1"
 booked_weight = 3
 
 [angle_prompts]
-A4  = "a4-safety-page"
 A5  = "a5-load-type"
 A7  = "a7-carrier-liability"
 A10 = "a10-peer-proof"
@@ -50,7 +49,6 @@ target = 15
 b2b_product_makers = ""
 
 [angle_pitch]
-A4  = "Safety Page vs Loading Yard: \"your safety page is strong on the floor, the trailer deck is the corner worth checking\""
 A5  = "Load Type Fit: \"what you ship decides where your people stand, here is the system built for that load\""
 A7  = "Carrier Liability: \"it is not your driver, but the claim follows your site\""
 A10 = "Peer Proof: \"a plant like yours already put this on its trailers\""

@@ -100,6 +100,11 @@ class Profile:
     fit_screen_model: str | None = None
     # True: the screen model is the ONLY fit judge (no Sonnet confirm). TFP, Emmanuel 2026-10-15: cheaper for the long run.
     fit_screen_only: bool = False
+    # TFP hard rules. mx_blocklist: never load a contact whose domain sits behind Mimecast or Barracuda (checked by MX record before copy is
+    # written). company_custom_field: send COMPANY (legal suffixes stripped, 3 words at most) as a lead field, because the model campaign's
+    # step 3 uses {{COMPANY}}.
+    mx_blocklist: bool = False
+    company_custom_field: bool = False
     # Opt-in, for two clients that share one pool of firms (ProQ and MasterNow). All
     # default to off, so every other client behaves exactly as before. See
     # app/consultant_gate.py.
@@ -405,6 +410,8 @@ def load(name: str | None = None) -> Profile:
         countries=tuple(str(c).upper() for c in (cfg.get("countries") or ["US"])),
         fit_screen_model=cfg.get("fit_screen_model") or None,
         fit_screen_only=bool(cfg.get("fit_screen_only", False)),
+        mx_blocklist=bool(cfg.get("mx_blocklist", False)),
+        company_custom_field=bool(cfg.get("company_custom_field", False)),
         model_campaign_id=cfg.get("model_campaign_id"),
         step_wait_days=int(cfg.get("step_wait_days") or 3),
         employee_min=int(cfg.get("employee_min") or 11),
