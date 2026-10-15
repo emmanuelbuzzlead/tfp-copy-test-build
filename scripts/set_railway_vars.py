@@ -7,7 +7,7 @@ each value to `railway variable set --stdin`. Output lists variable NAMES and ok
 
 Usage (from the railway-lumion folder, linked to the lumion project):
     python scripts/set_railway_vars.py            set everything
-    python scripts/set_railway_vars.py --slack    also set the Slack bot token and signing secret (LUMION_SLACK_*)
+    python scripts/set_railway_vars.py --slack    also set the Slack bot token and signing secret (TFP_SLACK_*)
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ FROM_ENV = [
     "ANTHROPIC_API_KEY", "CONCENTRATE_AI_API_KEY", "OPENROUTER_API_KEY", "BUZZLEAD_API_KEY",
     "AIARK_API_KEY", "APOLLO_API_KEY", "HUNTER_API_KEY", "ICYPEAS_API_KEY", "LEADMAGIC_API_KEY",
 ]
-SLACK_MAP = {"LUMION_SLACK_BOT_TOKEN": "SLACK_BOT_TOKEN", "LUMION_SLACK_SIGNING_SECRET": "SLACK_SIGNING_SECRET"}
+SLACK_MAP = {"TFP_SLACK_BOT_TOKEN": "SLACK_BOT_TOKEN", "TFP_SLACK_SIGNING_SECRET": "SLACK_SIGNING_SECRET"}
 
 # Fixed values. Safe defaults: nothing runs, nothing auto starts, senders are attached by hand.
 FIXED = {
