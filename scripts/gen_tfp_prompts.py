@@ -74,7 +74,7 @@ There is no customer in construction or building materials: use P1 and say only 
 
 SKIP = """NEVER MENTION an incident, fall, injury, citation or OSHA event at the prospect's own company, even if the research shows one. Write the email normally."""
 
-DATA_NOTE = """DATA YOU RECEIVE. The user message gives the prospect's company, their job title and a RESEARCH block that is JSON with these fields: company_short, sector, location_count, named_locations, load_types, trailer_types (and trailer_types_confidence), fleet_model (and fleet_model_confidence), safety_quote, safety_program_name, site_constraints, news_context (expansion, safety_recognition, incident_or_osha), persona_bucket, usable_hook, data_quality. Use company_short as the company's name. Fields that are null or empty were not found on the site: never invent them, write around them with a hedge or a plainer first line that is still about them."""
+DATA_NOTE = """DATA YOU RECEIVE. The user message gives the prospect's company, their job title and a RESEARCH block that is JSON with these fields: company_short, sector, location_count, named_locations, load_types, trailer_types (and trailer_types_confidence), fleet_model (and fleet_model_confidence), site_constraints, news_context (expansion), persona_bucket, usable_hook, data_quality. Use company_short as the company's name. Fields that are null or empty were not found on the site: never invent them, write around them with a hedge or a plainer first line that is still about them."""
 
 FALLBACKS = {
     "a4-safety-page": "FALLBACK. If safety_quote, safety_program_name and news_context.safety_recognition are all null, open on the most specific true fact you have (usable_hook, a named location or their product) and keep the trailer deck pivot hedged (\"guessing\", \"if I've read this right\").",
@@ -140,6 +140,10 @@ def research_system() -> str:
     # TFP's declared verticals are broader, so the enum is widened. Proof choice for the new sectors falls back to P1/P4 (see ROUTING).
     out = out.replace('"chemicals_industrial","other"]', '"chemicals_industrial","machinery_equipment","food_beverage","wholesale_distribution","mining_energy",'
                       '"defense_aerospace","agriculture_forestry","automotive_transport_equipment","equipment_rental_recycling","consumer_medical_products","other"]')
+    # Speed trim (Emmanuel, 2026-10-16): A4 is dropped and the SKIP rule is gone, so the safety and incident fields feed nothing. Fewer fields, shorter answer.
+    drop = re.compile(r'\s*"(safety_quote|safety_quote_page|safety_program_name|safety_recognition|incident_or_osha)"')
+    out = "\n".join(line for line in out.split("\n") if not drop.match(line))
+    out = re.sub(r'("expansion":[^\n]*or null),', r'\1', out)
     return out
 
 

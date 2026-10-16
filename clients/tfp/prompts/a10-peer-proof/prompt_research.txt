@@ -30,15 +30,10 @@ Return JSON only, no prose, no code fence:
   "fleet_model": "private_fleet" | "common_carrier" | "customer_pickup" | "mixed" | "unknown",
   "fleet_model_evidence": "exact phrase or null",
   "fleet_model_confidence": "stated" | "low" | "none",
-  "safety_quote": "exact safety value phrase from the site, e.g. a Zero Harm or Target Zero line" or null,
-  "safety_quote_page": "url" or null,
-  "safety_program_name": "named program if any" or null,
   "site_constraints": ["low_clearance","tight_yard","outdoor_yard","high_volume","multi_shift","unknown"],
   "site_constraints_evidence": "phrase or null",
   "news_context": {
-     "expansion": "one-line summary of a new site, line, or acquisition in the last 12 months" or null,
-     "safety_recognition": "award or milestone" or null,
-     "incident_or_osha": "one-line summary" or null
+     "expansion": "one-line summary of a new site, line, or acquisition in the last 12 months" or null
   },
   "persona_bucket": "ehs" | "warehouse" | "logistics" | "plant_ops" | "other",
   "usable_hook": "the single most specific, non-generic fact you found that a peer would recognize as true about this company (max 20 words)",
