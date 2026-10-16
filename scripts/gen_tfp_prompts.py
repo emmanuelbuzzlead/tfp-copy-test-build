@@ -85,7 +85,7 @@ FALLBACKS = {
 
 # SHARED_RULES adapted for the engine (greeting, subject, output format).
 SH = SHARED
-SH = SH.replace("- Body 300 to 500 characters total. Subject 6 words or fewer.", "- Body 300 to 550 characters total. There is no subject line.")
+SH = SH.replace("- Body 300 to 500 characters total. Subject 6 words or fewer.", "- Body 300 to 550 characters total (aim for 450 to 500 so you land under the cap; never over 550). There is no subject line.")
 SH = SH.replace("- Start the body with the first name and a comma. No Hi, Hello, Hey, Dear.",
                 "- Do NOT start with a greeting or the first name. The sequence already prints \"Hi {first name} -\" in front of your text, so begin straight with the first line.")
 SH = re.sub(r"- Subject: .*\n", "", SH)

@@ -472,6 +472,10 @@ def _is_down(provider: str) -> bool:
         return _down_until.get(provider, 0) > time.time()
 
 
+import itertools as _itertools
+_COPY_ROTATE = _itertools.count()
+
+
 def _order(provider: str | None) -> list[str]:
     """Which gateways to try, in order, for one call.
 
@@ -482,6 +486,16 @@ def _order(provider: str | None) -> list[str]:
     should never depend on exactly one of them.
     """
     chain = CHAINS.get(provider or "copy") or [provider]
+    if (provider or "copy") == "copy":
+        # Emmanuel, 2026-10-16: the BuzzLead gateway answered a Haiku email call in 22 s on average, OpenRouter in 6 s (measured, same prompt, 8 in
+        # parallel). LLM_COPY_CHAIN puts the faster route first, and LLM_COPY_ROTATE alternates which provider goes first so the load (and the bill)
+        # is split across both accounts, as IDPR does with Concentrate and OpenRouter.
+        override = os.getenv("LLM_COPY_CHAIN", "").strip()
+        if override:
+            chain = [c.strip() for c in override.split(",") if c.strip()]
+        if os.getenv("LLM_COPY_ROTATE", "").strip().lower() in ("1", "true", "yes") and len(chain) > 1:
+            if next(_COPY_ROTATE) % 2:
+                chain = chain[1:2] + chain[:1] + chain[2:]
     live = [p for p in chain if _has(p) and not _is_down(p)]
     # If everything is marked down, try the chain anyway -- a breaker must never turn
     # a temporary outage into a permanent one.

@@ -99,3 +99,28 @@ def test_runway_report_is_compact_and_recommends(monkeypatch):
     out = runway.report()
     assert len(out.splitlines()) == 6 and "5,113 sourced" in out and "43% used" in out and "Next:" in out
     assert "more companies are needed" in runway.recommendation(n) and "Copy is the slower side" in runway.recommendation(n)
+
+
+def test_copy_chain_can_be_overridden_and_rotated(monkeypatch):
+    from app.clients import llm
+    monkeypatch.setattr(llm, "_has", lambda p: True)
+    monkeypatch.setattr(llm, "_is_down", lambda p: False)
+    monkeypatch.setenv("LLM_COPY_CHAIN", "openrouter,buzzlead,concentrate")
+    monkeypatch.delenv("LLM_COPY_ROTATE", raising=False)
+    assert llm._order("copy") == ["openrouter", "buzzlead", "concentrate"]
+    monkeypatch.setenv("LLM_COPY_ROTATE", "true")
+    firsts = {llm._order("copy")[0] for _ in range(4)}
+    assert firsts == {"openrouter", "buzzlead"}                       # the load is split across both accounts
+    assert llm._order("research")[0] == "buzzlead"                    # research stays where it is fastest
+
+
+def test_runway_page_renders_in_plain_words(monkeypatch):
+    from app import runway, runway_page
+    n = dict(goal=4500, target=1500, loaded=239, loaded_by={"A5": 77, "A7": 98, "A10": 64}, per_hour=173, bank=974, held=103, sourced=5059, searched=2583,
+             left=2476, with_contacts=797, contact_rows=1300, fit_failed=682, cps=0.5, potential=2166.0)
+    monkeypatch.setattr(runway_page, "numbers", lambda: n)
+    monkeypatch.setattr(runway_page, "_targets", lambda: {"target": 1500, "angles": {"A5": 2103, "A7": 2106, "A10": 2107}})
+    monkeypatch.setattr(runway_page, "held_reasons", lambda: [("Email came out longer than the cap, even after retries", 40)])
+    monkeypatch.setattr(runway_page, "_vertical_rows", lambda: [{"v": "Food and Beverage Production", "sourced": 373, "searched": 114, "with_contacts": 57}])
+    html = runway_page.page_html()
+    assert "239 of 4,500 leads loaded (5%)" in html and "What I recommend" in html and "Contacts ready for copy" in html and 'http-equiv="refresh"' in html

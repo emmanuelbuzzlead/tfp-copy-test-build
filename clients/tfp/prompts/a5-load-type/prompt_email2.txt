@@ -97,7 +97,7 @@ INDUSTRY_INSIGHT:   # A4 only
 WRITING RULES. Breaking any of these fails the email.
 
 Format:
-- Body 300 to 550 characters total. There is no subject line.
+- Body 300 to 550 characters total (aim for 450 to 500 so you land under the cap; never over 550). There is no subject line.
 - Do NOT start with a greeting or the first name. The sequence already prints "Hi {first name} -" in front of your text, so begin straight with the first line.
 - Paragraphs of 1 to 2 sentences, blank line between them.
 - No colon in the first line. No em dashes or en dashes. At most one exclamation point (prefer none). No emojis. No ALL CAPS.

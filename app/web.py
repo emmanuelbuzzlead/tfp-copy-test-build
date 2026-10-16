@@ -129,9 +129,19 @@ _HEALTH_TABLES = [
 ]
 
 
-@app.get("/runway", response_class=PlainTextResponse)
-def runway_page() -> PlainTextResponse:
-    """Compact runway status plus a per-vertical table. Read-only."""
+@app.get("/runway", response_class=HTMLResponse)
+def runway_page() -> HTMLResponse:
+    """The one-screen runway dashboard in plain words (app/runway_page.py). Read-only, refreshes itself."""
+    try:
+        from . import runway_page as page
+        return HTMLResponse(page.page_html())
+    except Exception as exc:
+        return HTMLResponse(f"<pre>runway unavailable: {exc}</pre>", status_code=500)
+
+
+@app.get("/runway.txt", response_class=PlainTextResponse)
+def runway_text() -> PlainTextResponse:
+    """The same numbers as plain text, for pasting into Slack or a note."""
     from . import runway
     try:
         return PlainTextResponse(runway.report().replace("*", "") + "\n\n" + runway.by_vertical())
