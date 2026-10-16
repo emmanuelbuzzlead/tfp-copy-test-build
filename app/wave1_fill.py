@@ -497,8 +497,9 @@ def fill(post: bool = True) -> dict:
             cur.execute("""SELECT c.email, c.first_name, c.last_name, c.title, c.company_domain, c.company_name,
                                   c.vertical
                            FROM contacts c LEFT JOIN company_funnel f ON f.domain = c.company_domain
+                           -- label contacts_found_not_sent: funnel_dedupe re-labels a sourced company that already has contacts and history_backfill2 sets it to tier 9; those are OUR bank, not suppressed (found 2026-10-16, 597 contacts were stranded)
                            -- f.domain IS NULL: contacts found for newly staged schools, which have no tier row yet (261 sat unused 2026-10-11)
-                           WHERE (f.tier = 1 OR f.domain IS NULL OR c.source = 'reuse_tier2')      -- + leads a stopped batch left behind
+                           WHERE (f.tier = 1 OR f.domain IS NULL OR f.label = 'contacts_found_not_sent' OR c.source = 'reuse_tier2')      -- + leads a stopped batch left behind
                              AND NOT coalesce(f.replied, false) AND c.status = 'verified'
                              AND c.eb_campaign_id IS NULL AND coalesce(c.first_name, '') <> ''
                              AND coalesce(c.personalization_1, '') = ''
