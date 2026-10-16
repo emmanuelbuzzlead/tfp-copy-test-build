@@ -1,4 +1,4 @@
-SOURCE: TFP-COPY-SPEC.md (2026-10-15), adapted for the engine by scripts/gen_tfp_prompts.py, PROMPT F, Email 2 150 to 300 chars
+SOURCE: TFP-COPY-SPEC.md (2026-10-15), adapted for the engine by scripts/gen_tfp_prompts.py, PROMPT F, Email 2 150 to 375 chars
 VARIANT: a10-peer-proof
 model: anthropic/claude-haiku-4.5
 temperature: 0.7
@@ -19,7 +19,7 @@ Pick the follow-up move that fits best:
 - One-liner question: a sharp question about their yard that Email 1 raised but didn't ask.
 
 Rules
-- 150 to 300 characters. 2 or 3 short paragraphs.
+- 150 to 375 characters. 2 or 3 short paragraphs.
 - Do not start with a greeting or the first name; the sequence prints "Hi {first name} -" first.
 - Never say: just following up, bumping, checking in, circling back, following up, in case you missed, any construction that refers to the previous email being unanswered.
 - Never promise to stop emailing if they stay silent. If you include an out, it must require them to act ("a one-word 'pass' works if this isn't yours").

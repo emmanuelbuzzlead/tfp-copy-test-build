@@ -28,6 +28,7 @@ def pick_companies(verticals: list[str], n: int) -> list[dict]:
                WHERE s.verdict = 'KEEP' AND s.vertical = ANY(%s)
                  AND s.found_at IS NULL AND s.consumed_at IS NULL
                  AND f.tier = 1 AND NOT coalesce(f.replied, false)
+                 AND coalesce(f.fit, '') NOT IN ('LOW', 'NOT_FIT')   -- a company the website fit check rejected is never searched for contacts
                ORDER BY s.domain""", (verticals,))
         rows = cur.fetchall()
     rank = {"MAKER": 0, None: 1, "UNKNOWN": 1, "NO_SITE": 2}

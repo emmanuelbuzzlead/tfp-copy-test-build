@@ -85,7 +85,7 @@ FALLBACKS = {
 
 # SHARED_RULES adapted for the engine (greeting, subject, output format).
 SH = SHARED
-SH = SH.replace("- Body 300 to 500 characters total. Subject 6 words or fewer.", "- Body 300 to 500 characters total. There is no subject line.")
+SH = SH.replace("- Body 300 to 500 characters total. Subject 6 words or fewer.", "- Body 300 to 575 characters total. There is no subject line.")
 SH = SH.replace("- Start the body with the first name and a comma. No Hi, Hello, Hey, Dear.",
                 "- Do NOT start with a greeting or the first name. The sequence already prints \"Hi {first name} -\" in front of your text, so begin straight with the first line.")
 SH = re.sub(r"- Subject: .*\n", "", SH)
@@ -123,11 +123,12 @@ def email2_system(folder: str, title: str) -> str:
     moves = "Pick the follow-up move that fits best:" + F.split("Pick the follow-up move that fits best:", 1)[1].split("\n{{SHARED_RULES")[0]
     moves = moves.replace("{{named_location}}", "their named location").replace("{{angle}}", title)
     moves = re.sub(r"\{\{[^}]*\}\}", "the matching research field", moves)
+    moves = moves.replace("150 to 300 characters", "150 to 375 characters")   # caps raised by 75 (Emmanuel, 2026-10-16)
     moves = moves.replace("- Start with first name and a comma.\n", "- Do not start with a greeting or the first name; the sequence prints \"Hi {first name} -\" first.\n")
     head = ("You write the second email in a cold sequence for Truck Fall Prevention (TFP). It sends 3 business days after Email 1, in the same thread, so no subject line.\n"
             f"This sequence's angle is \"{title}\": stay in that angle, with a new element.")
     shared2 = re.sub(r"Structure \(4T\):.*?\n\nFormat:", "Format:", SH, flags=re.S)
-    shared2 = shared2.replace("- Body 300 to 500 characters total. There is no subject line.\n", "")
+    shared2 = shared2.replace("- Body 300 to 575 characters total. There is no subject line.\n", "")
     return "\n\n".join([head, DATA_NOTE, SKIP.replace("Email 1", "this email"), moves.strip(), ROUTING, "PROOF LIBRARY (the only claims you may make; use a DIFFERENT peer than Email 1 used, read it from the Email 1 text)\n" + PROOFS, shared2]).replace("\n\n\n", "\n\n")
 
 
@@ -182,8 +183,8 @@ for folder, (key, title, _m) in ANGLES.items():
     d = OUT / "prompts" / folder
     d.mkdir(parents=True, exist_ok=True)
     (d / "prompt_research.txt").write_text(prompt_file("research", folder, RESEARCH_MODEL, 0, 2000, src + ", PROMPT R", research_system(), RES_USER), encoding="utf-8")
-    (d / "prompt_email1.txt").write_text(prompt_file("email1", folder, EMAIL_MODEL, 0.7, 700, src + f", PROMPT {key}, Email 1 300 to 500 chars", angle_system(folder), E1_USER), encoding="utf-8")
-    (d / "prompt_email2.txt").write_text(prompt_file("email2", folder, EMAIL_MODEL, 0.7, 500, src + ", PROMPT F, Email 2 150 to 300 chars", email2_system(folder, title), E2_USER), encoding="utf-8")
+    (d / "prompt_email1.txt").write_text(prompt_file("email1", folder, EMAIL_MODEL, 0.7, 700, src + f", PROMPT {key}, Email 1 300 to 575 chars", angle_system(folder), E1_USER), encoding="utf-8")
+    (d / "prompt_email2.txt").write_text(prompt_file("email2", folder, EMAIL_MODEL, 0.7, 500, src + ", PROMPT F, Email 2 150 to 375 chars", email2_system(folder, title), E2_USER), encoding="utf-8")
 
 # ---- copy rules (added to the shared floor in app/validator.py) ----
 SPAM = ("get bank credit access open compare problem now billing deal finance financial claims insurance mortgage soon new performance freedom home sales "
@@ -280,7 +281,7 @@ def setkey(src: str, key: str, value: str) -> str:
     return pat.sub(lambda _m: f"{key} = {value}", src, count=1) if pat.search(src) else src + f"\n{key} = {value}\n"
 
 
-for k, v in (("email1_min_chars", "300"), ("email1_max_chars", "500"), ("email2_min_chars", "150"), ("email2_max_chars", "300"), ("base_variant", '"a10-peer-proof"')):
+for k, v in (("email1_min_chars", "300"), ("email1_max_chars", "575"), ("email2_min_chars", "150"), ("email2_max_chars", "375"), ("base_variant", '"a10-peer-proof"')):
     ct = setkey(ct, k, v)
 ct = re.sub(r"(?s)# Angles are pending.*?(?=\[\[vertical_defs\]\])", "", ct)
 ct = re.sub(r"\[\[copy_variants\]\]\nname = .*\nbet = .*\n\n?", "", ct)   # idempotent: drop any arms from an earlier run

@@ -68,8 +68,10 @@ def _say(text: str) -> None:
 
 def _bank() -> int:
     with db.cursor() as cur:
-        cur.execute("""SELECT count(*) n FROM contacts WHERE status = 'verified' AND eb_campaign_id IS NULL AND coalesce(first_name, '') <> ''
-                       AND coalesce(personalization_1, '') = ''""")
+        # Contacts at companies the website fit check rejected are not supply: the fill will never use them.
+        cur.execute("""SELECT count(*) n FROM contacts c LEFT JOIN company_funnel f ON f.domain = c.company_domain
+                       WHERE c.status = 'verified' AND c.eb_campaign_id IS NULL AND coalesce(c.first_name, '') <> ''
+                         AND coalesce(c.personalization_1, '') = '' AND coalesce(f.fit, '') NOT IN ('LOW', 'NOT_FIT')""")
         return int(cur.fetchone()["n"])
 
 
@@ -109,9 +111,16 @@ def run() -> dict:
         chunks = 0
         while _bank() < bank_target and chunks < 15:
             _beat(holder)
-            companies = scaling.pick_companies(verticals, 100)
+            companies = scaling.pick_companies(verticals, 150)
             if not companies:
                 break
+            # The real fit check (website text, same judge as the fill) BEFORE paying for contact finding: the sourcing gate reads only the vendor
+            # description and kept about a third of companies that fail on their own site (measured 2026-10-15: 26 of 84 contacts).
+            from . import company_fit
+            verdicts = company_fit.check([{"domain": c["domain"], "name": c.get("name") or ""} for c in companies], workers=6)
+            companies = [c for c in companies if (verdicts.get(c["domain"]) or {}).get("fit") in company_fit.PASS]
+            if not companies:
+                continue
             scaling.source_contacts(companies, run_id)
             chunks += 1
             st["contact_chunks"] = st.get("contact_chunks", 0) + 1
