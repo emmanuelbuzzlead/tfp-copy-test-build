@@ -87,6 +87,11 @@ async def lifespan(_: FastAPI):
         if _os.environ.get("TESTRUN_ENABLED", "").strip().lower() in ("1", "true", "yes"):
             # The first test run (source, find contacts, write copy, load drafts) runs inside this service and resumes after a redeploy.
             from . import testrun
+            try:
+                with db.cursor() as _cur:      # single instance: a booting process means the previous container's job died with it
+                    _cur.execute("DELETE FROM job_locks WHERE name = %s", (testrun.LOCK,))
+            except Exception as exc:
+                print(f"[startup] testrun lock release skipped: {exc}", flush=True)
             threading.Thread(target=testrun.run_safe, daemon=True).start()
     yield
 
