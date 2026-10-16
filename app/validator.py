@@ -404,6 +404,15 @@ def wrong_company(text: str, company_name: str | None,
             continue
         if _is_own(words, own):
             continue
+        # Names the client itself is allowed to say (its own product and the proof customers in its approved library): TFP's emails name NoFalls,
+        # Steel Dynamics, Eaton and others on purpose, so they are not "somebody else's company" (found 2026-10-16: NoFalls held an email).
+        try:
+            from . import client as _client
+            allowed = {w.lower() for n in _client.profile().protected_names for w in re.findall(r"[A-Za-z0-9&]+", n)}
+        except Exception:
+            allowed = set()
+        if allowed and all(w in allowed for w in low):
+            continue
         # "featured in Forbes" names a publication, not a rival.
         if _COVERAGE_RX.search(text[:m.start()][-60:]):
             continue

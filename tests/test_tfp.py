@@ -124,3 +124,9 @@ def test_runway_page_renders_in_plain_words(monkeypatch):
     monkeypatch.setattr(runway_page, "_vertical_rows", lambda: [{"v": "Food and Beverage Production", "sourced": 373, "searched": 114, "with_contacts": 57}])
     html = runway_page.page_html()
     assert "239 of 4,500 leads loaded (5%)" in html and "What I recommend" in html and "Contacts ready for copy" in html and 'http-equiv="refresh"' in html
+
+
+def test_own_product_and_proof_names_do_not_trip_the_wrong_company_check():
+    from app import validator
+    body = "Steel Dynamics put NoFalls on its trucks after the same problem.\nWorth a look at how Eaton Steel did it?"
+    assert validator.wrong_company(body, "J Walter Miller Co", "jwmiller.com") is None

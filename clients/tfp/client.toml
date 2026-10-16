@@ -73,6 +73,7 @@ fit_screen_only = true
 
 # TFP hard rules (memory tfp-mx-blocklist-rule, tfp-copy-field-standards): never load Mimecast or Barracuda contacts; COMPANY is cleaned to 3 words.
 skip_source_gate = true
+protected_names = ["NoFalls", "Truck Fall Prevention", "TFP", "Steel Dynamics", "SDI", "Eaton Steel", "Eaton", "ADICA", "ADICA Trucking", "Hercules Drawn Steel", "Hercules", "United Alloy", "MSCI"]
 fit_before_verify = true
 mx_blocklist = true
 company_custom_field = true
