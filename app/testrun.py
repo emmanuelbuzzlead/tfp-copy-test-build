@@ -213,7 +213,11 @@ def run() -> dict:
                 _set(st, fill={k: v for k, v in (out or {}).items() if k in ("status", "counts", "pulled")})
                 _bump(st, cycles=1)
                 _save(st)
-                _say(f"copy cycle {st.get('cycles')}: {now} of {target_total} leads loaded ({now - loaded} added). Per campaign: {st['fill'].get('counts')}. Bank: {_bank()}.")
+                try:
+                    from . import runway
+                    _say(f"copy cycle {st.get('cycles')} done (+{now - loaded}).\n" + runway.report())
+                except Exception:
+                    _say(f"copy cycle {st.get('cycles')}: {now} of {target_total} leads loaded ({now - loaded} added). Bank: {_bank()}.")
                 low_cycles = low_cycles + 1 if now - loaded < 10 else 0
                 if low_cycles >= 4:
                     _say(f"progress has stalled at {now} leads (four copy cycles added almost nothing). Stopping so you can look.")

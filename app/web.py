@@ -129,6 +129,16 @@ _HEALTH_TABLES = [
 ]
 
 
+@app.get("/runway", response_class=PlainTextResponse)
+def runway_page() -> PlainTextResponse:
+    """Compact runway status plus a per-vertical table. Read-only."""
+    from . import runway
+    try:
+        return PlainTextResponse(runway.report().replace("*", "") + "\n\n" + runway.by_vertical())
+    except Exception as exc:
+        return PlainTextResponse(f"runway unavailable: {exc}", status_code=500)
+
+
 @app.get("/health")
 def health() -> JSONResponse:
     body = settings.describe()

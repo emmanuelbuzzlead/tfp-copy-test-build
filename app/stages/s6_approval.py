@@ -914,6 +914,11 @@ def handle_command(text: str, user: str) -> str | dict:
         # after. It changes nothing; it only looks.
         return _deploycheck()
 
+    if action == "runway":
+        # /<command> runway -- the compact one-screen count of leads, contacts, companies and what is left (app/runway.py)
+        from .. import runway
+        return runway.report()
+
     if action == "status":
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)

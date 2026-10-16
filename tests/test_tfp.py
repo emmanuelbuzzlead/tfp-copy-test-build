@@ -89,3 +89,13 @@ def test_fit_before_verify_is_on_and_documented():
     from app.stages import s4_people
     src = inspect.getsource(s4_people.build)
     assert src.index("fit_before_verify") < src.index("waterfall.verify_batch(shortlist")   # the fit check comes before any address is verified
+
+
+def test_runway_report_is_compact_and_recommends(monkeypatch):
+    from app import runway
+    n = dict(goal=4500, target=1500, loaded=232, loaded_by={"A5": 64, "A7": 82, "A10": 86}, per_hour=40, bank=764, held=10, sourced=5113, searched=2185,
+             left=2928, with_contacts=728, contact_rows=1236, fit_failed=375, cps=0.57, potential=2250.0)
+    monkeypatch.setattr(runway, "numbers", lambda: n)
+    out = runway.report()
+    assert len(out.splitlines()) == 6 and "5,113 sourced" in out and "43% used" in out and "Next:" in out
+    assert "more companies are needed" in runway.recommendation(n) and "Copy is the slower side" in runway.recommendation(n)
