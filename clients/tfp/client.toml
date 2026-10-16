@@ -47,9 +47,9 @@ reuse_fit_check = true
 # pipeline wants E1 300 to 500 and E2 600 to 800. The intersection is used, except that Email 2's floor is 550 (Emmanuel, 2026-10-09):
 # the model lands at 570 to 597 and was rewriting up to seven times to clear 600.
 email1_min_chars = 300
-email1_max_chars = 575
+email1_max_chars = 550
 email2_min_chars = 150
-email2_max_chars = 375
+email2_max_chars = 700
 
 fit_rule = "a US or Canadian company, about 100 or more employees, that operates a plant, yard, warehouse, terminal or supply site where its own people load or unload trucks (flatbed, conestoga or dry van), in any industry. Not a fit: outside US and Canada, government, software and services, retail storefronts, asset-light brokers, terminal-less carriers."
 

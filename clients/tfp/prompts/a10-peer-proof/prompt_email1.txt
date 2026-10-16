@@ -1,4 +1,4 @@
-SOURCE: TFP-COPY-SPEC.md (2026-10-15), adapted for the engine by scripts/gen_tfp_prompts.py, PROMPT A10, Email 1 300 to 575 chars
+SOURCE: TFP-COPY-SPEC.md (2026-10-15), adapted for the engine by scripts/gen_tfp_prompts.py, PROMPT A10, Email 1 300 to 550 chars
 VARIANT: a10-peer-proof
 model: anthropic/claude-haiku-4.5
 temperature: 0.7
@@ -17,7 +17,7 @@ DATA YOU RECEIVE. The user message gives the prospect's company, their job title
 
 MODE. Use multi_site when location_count is 3 or more or news_context.expansion is not null; otherwise single_site.
 
-SKIP RULE. If the research JSON has news_context.incident_or_osha that is not null, or sector is "other" with data_quality "low", output exactly the one word SKIP and nothing else. Never mention an incident, fall, injury or OSHA event at the prospect's own company.
+NEVER MENTION an incident, fall, injury, citation or OSHA event at the prospect's own company, even if the research shows one. Write the email normally.
 
 How to write it
 single_site:
@@ -115,7 +115,7 @@ Structure (4T):
 4. Talk: one low-friction question. Never ask for a meeting, call, or time on a calendar.
 
 Format:
-- Body 300 to 575 characters total. There is no subject line.
+- Body 300 to 550 characters total. There is no subject line.
 - Do NOT start with a greeting or the first name. The sequence already prints "Hi {first name} -" in front of your text, so begin straight with the first line.
 - Paragraphs of 1 to 2 sentences, blank line between them.
 - No colon in the first line. No em dashes or en dashes. At most one exclamation point (prefer none). No emojis. No ALL CAPS.

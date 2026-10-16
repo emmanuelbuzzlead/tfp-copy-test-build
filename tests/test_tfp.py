@@ -20,7 +20,7 @@ def test_each_angle_has_research_email1_and_email2_prompts(angle):
     r, e1, e2 = prompts.research(angle), prompts.email1(angle), prompts.email2(angle)
     assert r.model == "openai/gpt-oss-120b" and e1.model == e2.model == "anthropic/claude-haiku-4.5"
     for pr in (e1, e2):
-        assert "P1:" in pr.system and "INEOS" not in pr.system and "SKIP RULE" in pr.system
+        assert "P1:" in pr.system and "INEOS" not in pr.system and "SKIP RULE" not in pr.system and "NEVER MENTION" in pr.system
         assert "Do NOT start with a greeting" in pr.system or "Do not start with a greeting" in pr.system
     assert "{research_report}" in e1.user_template and "{email_1_output}" in e2.user_template
 

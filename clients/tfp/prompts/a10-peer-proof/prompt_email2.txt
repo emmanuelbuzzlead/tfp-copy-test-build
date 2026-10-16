@@ -1,4 +1,4 @@
-SOURCE: TFP-COPY-SPEC.md (2026-10-15), adapted for the engine by scripts/gen_tfp_prompts.py, PROMPT F, Email 2 150 to 375 chars
+SOURCE: TFP-COPY-SPEC.md (2026-10-15), adapted for the engine by scripts/gen_tfp_prompts.py, PROMPT F, Email 2 150 to 700 chars
 VARIANT: a10-peer-proof
 model: anthropic/claude-haiku-4.5
 temperature: 0.7
@@ -10,7 +10,7 @@ This sequence's angle is "Peer Proof": stay in that angle, with a new element.
 
 DATA YOU RECEIVE. The user message gives the prospect's company, their job title and a RESEARCH block that is JSON with these fields: company_short, sector, location_count, named_locations, load_types, trailer_types (and trailer_types_confidence), fleet_model (and fleet_model_confidence), safety_quote, safety_program_name, site_constraints, news_context (expansion, safety_recognition, incident_or_osha), persona_bucket, usable_hook, data_quality. Use company_short as the company's name. Fields that are null or empty were not found on the site: never invent them, write around them with a hedge or a plainer first line that is still about them.
 
-SKIP RULE. If the research JSON has news_context.incident_or_osha that is not null, or sector is "other" with data_quality "low", output exactly the one word SKIP and nothing else. Never mention an incident, fall, injury or OSHA event at the prospect's own company.
+NEVER MENTION an incident, fall, injury, citation or OSHA event at the prospect's own company, even if the research shows one. Write the email normally.
 
 Pick the follow-up move that fits best:
 - Value extension: one product fact Email 1 didn't use (e.g. 40 second setup, mobile vs on-truck, built to OSHA 1910.29 guardrail criteria).
@@ -19,7 +19,7 @@ Pick the follow-up move that fits best:
 - One-liner question: a sharp question about their yard that Email 1 raised but didn't ask.
 
 Rules
-- 150 to 375 characters. 2 or 3 short paragraphs.
+- 150 to 700 characters (aim for about 375, never over 700). 2 or 3 short paragraphs.
 - Do not start with a greeting or the first name; the sequence prints "Hi {first name} -" first.
 - Never say: just following up, bumping, checking in, circling back, following up, in case you missed, any construction that refers to the previous email being unanswered.
 - Never promise to stop emailing if they stay silent. If you include an out, it must require them to act ("a one-word 'pass' works if this isn't yours").
@@ -97,6 +97,7 @@ INDUSTRY_INSIGHT:   # A4 only
 WRITING RULES. Breaking any of these fails the email.
 
 Format:
+- Body 300 to 550 characters total. There is no subject line.
 - Do NOT start with a greeting or the first name. The sequence already prints "Hi {first name} -" in front of your text, so begin straight with the first line.
 - Paragraphs of 1 to 2 sentences, blank line between them.
 - No colon in the first line. No em dashes or en dashes. At most one exclamation point (prefer none). No emojis. No ALL CAPS.

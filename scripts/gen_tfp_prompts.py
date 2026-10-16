@@ -72,7 +72,7 @@ Email 1 uses the PRIMARY peer, Email 2 uses a DIFFERENT one.
 | building_materials, construction, other, and every sector added below (machinery_equipment, food_beverage, wholesale_distribution, mining_energy, defense_aerospace, agriculture_forestry, automotive_transport_equipment, equipment_rental_recycling, consumer_medical_products) | P1 SDI | P4 Eaton Steel |
 There is no customer in construction or building materials: use P1 and say only what P1 says. A10 in multi_site mode always uses P1 as primary. A7 always uses P2  as primary."""
 
-SKIP = """SKIP RULE. If the research JSON has news_context.incident_or_osha that is not null, or sector is "other" with data_quality "low", output exactly the one word SKIP and nothing else. Never mention an incident, fall, injury or OSHA event at the prospect's own company."""
+SKIP = """NEVER MENTION an incident, fall, injury, citation or OSHA event at the prospect's own company, even if the research shows one. Write the email normally."""
 
 DATA_NOTE = """DATA YOU RECEIVE. The user message gives the prospect's company, their job title and a RESEARCH block that is JSON with these fields: company_short, sector, location_count, named_locations, load_types, trailer_types (and trailer_types_confidence), fleet_model (and fleet_model_confidence), safety_quote, safety_program_name, site_constraints, news_context (expansion, safety_recognition, incident_or_osha), persona_bucket, usable_hook, data_quality. Use company_short as the company's name. Fields that are null or empty were not found on the site: never invent them, write around them with a hedge or a plainer first line that is still about them."""
 
@@ -85,7 +85,7 @@ FALLBACKS = {
 
 # SHARED_RULES adapted for the engine (greeting, subject, output format).
 SH = SHARED
-SH = SH.replace("- Body 300 to 500 characters total. Subject 6 words or fewer.", "- Body 300 to 575 characters total. There is no subject line.")
+SH = SH.replace("- Body 300 to 500 characters total. Subject 6 words or fewer.", "- Body 300 to 550 characters total. There is no subject line.")
 SH = SH.replace("- Start the body with the first name and a comma. No Hi, Hello, Hey, Dear.",
                 "- Do NOT start with a greeting or the first name. The sequence already prints \"Hi {first name} -\" in front of your text, so begin straight with the first line.")
 SH = re.sub(r"- Subject: .*\n", "", SH)
@@ -123,7 +123,7 @@ def email2_system(folder: str, title: str) -> str:
     moves = "Pick the follow-up move that fits best:" + F.split("Pick the follow-up move that fits best:", 1)[1].split("\n{{SHARED_RULES")[0]
     moves = moves.replace("{{named_location}}", "their named location").replace("{{angle}}", title)
     moves = re.sub(r"\{\{[^}]*\}\}", "the matching research field", moves)
-    moves = moves.replace("150 to 300 characters", "150 to 375 characters")   # caps raised by 75 (Emmanuel, 2026-10-16)
+    moves = moves.replace("150 to 300 characters", "150 to 700 characters (aim for about 375, never over 700)")   # caps raised by 75 (Emmanuel, 2026-10-16)
     moves = moves.replace("- Start with first name and a comma.\n", "- Do not start with a greeting or the first name; the sequence prints \"Hi {first name} -\" first.\n")
     head = ("You write the second email in a cold sequence for Truck Fall Prevention (TFP). It sends 3 business days after Email 1, in the same thread, so no subject line.\n"
             f"This sequence's angle is \"{title}\": stay in that angle, with a new element.")
@@ -183,8 +183,8 @@ for folder, (key, title, _m) in ANGLES.items():
     d = OUT / "prompts" / folder
     d.mkdir(parents=True, exist_ok=True)
     (d / "prompt_research.txt").write_text(prompt_file("research", folder, RESEARCH_MODEL, 0, 2000, src + ", PROMPT R", research_system(), RES_USER), encoding="utf-8")
-    (d / "prompt_email1.txt").write_text(prompt_file("email1", folder, EMAIL_MODEL, 0.7, 700, src + f", PROMPT {key}, Email 1 300 to 575 chars", angle_system(folder), E1_USER), encoding="utf-8")
-    (d / "prompt_email2.txt").write_text(prompt_file("email2", folder, EMAIL_MODEL, 0.7, 500, src + ", PROMPT F, Email 2 150 to 375 chars", email2_system(folder, title), E2_USER), encoding="utf-8")
+    (d / "prompt_email1.txt").write_text(prompt_file("email1", folder, EMAIL_MODEL, 0.7, 700, src + f", PROMPT {key}, Email 1 300 to 550 chars", angle_system(folder), E1_USER), encoding="utf-8")
+    (d / "prompt_email2.txt").write_text(prompt_file("email2", folder, EMAIL_MODEL, 0.7, 500, src + ", PROMPT F, Email 2 150 to 700 chars", email2_system(folder, title), E2_USER), encoding="utf-8")
 
 # ---- copy rules (added to the shared floor in app/validator.py) ----
 SPAM = ("get bank credit access open compare problem now billing deal finance financial claims insurance mortgage soon new performance freedom home sales "
@@ -281,7 +281,7 @@ def setkey(src: str, key: str, value: str) -> str:
     return pat.sub(lambda _m: f"{key} = {value}", src, count=1) if pat.search(src) else src + f"\n{key} = {value}\n"
 
 
-for k, v in (("email1_min_chars", "300"), ("email1_max_chars", "575"), ("email2_min_chars", "150"), ("email2_max_chars", "375"), ("base_variant", '"a10-peer-proof"')):
+for k, v in (("email1_min_chars", "300"), ("email1_max_chars", "550"), ("email2_min_chars", "150"), ("email2_max_chars", "700"), ("base_variant", '"a10-peer-proof"')):
     ct = setkey(ct, k, v)
 ct = re.sub(r"(?s)# Angles are pending.*?(?=\[\[vertical_defs\]\])", "", ct)
 ct = re.sub(r"\[\[copy_variants\]\]\nname = .*\nbet = .*\n\n?", "", ct)   # idempotent: drop any arms from an earlier run
