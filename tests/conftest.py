@@ -38,5 +38,9 @@ def _generic_validator_tests_ignore_proq_minimums(request, monkeypatch):
     monkeypatch.setattr(validator, "required_paragraphs", lambda: None)
     import dataclasses   # the client's own length windows are tested in test_tfp.py, not in the inherited tests
     monkeypatch.setattr(validator, "settings", dataclasses.replace(validator.settings, email1_max_chars=500, email2_max_chars=1100))   # the two-paragraph rule is tested in test_lumion.py
+    # The inherited contact-finding tests have no database: the TFP fit-before-verify step (tested in test_tfp.py) is switched off for them.
+    from app import client as _client
+    _base = _client.profile()
+    monkeypatch.setattr(_client, "profile", lambda: dataclasses.replace(_base, fit_before_verify=False))
     # The inherited intake and top-up tests exercise the generic engine, so they run with the automatic intake ON.
     monkeypatch.setenv("AUTO_INTAKE", "true")
