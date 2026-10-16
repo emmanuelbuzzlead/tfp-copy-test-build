@@ -81,3 +81,11 @@ def test_testrun_is_a_web_job_with_resumable_state(monkeypatch):
         def fetchone(self): return {"n": 7}
     monkeypatch.setattr(testrun.db, "cursor", lambda: Cur())
     assert testrun._bank() == 7
+
+
+def test_fit_before_verify_is_on_and_documented():
+    assert client.profile().fit_before_verify is True and client.profile().skip_source_gate is True
+    import inspect
+    from app.stages import s4_people
+    src = inspect.getsource(s4_people.build)
+    assert src.index("fit_before_verify") < src.index("waterfall.verify_batch(shortlist")   # the fit check comes before any address is verified

@@ -136,7 +136,7 @@ def _contact_chunks(prof, st: dict, holder: str, run_id: str, want: int) -> int:
         st["fit_passed"] = st.get("fit_passed", 0) + len(passing)
         chunks += 1
         _save(st)
-        _say(f"{len(companies)} companies searched, {len(with_contacts)} had contacts and were fit-checked, {len(passing)} passed; {_bank()} usable contacts in the bank (cycle goal {want}).")
+        _say(f"{len(companies)} companies searched, {len(with_contacts)} had contacts that passed the fit check (judged before verification); {_bank()} usable contacts in the bank (cycle goal {want}).")
     return chunks
 
 

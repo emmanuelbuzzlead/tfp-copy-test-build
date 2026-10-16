@@ -745,6 +745,23 @@ def build(companies: list[dict], run_id: str,
             if not shortlist:
                 continue
 
+            # fit_before_verify (TFP, Emmanuel 2026-10-16): the website fit check runs on the companies that HAVE a contact, BEFORE any address is verified,
+            # so verification credit is never spent on people at companies that will be rejected. Only about half of the companies yield a contact,
+            # so this judges about half of what a fit-first order would.
+            from .. import client as _client
+            if _client.profile().fit_before_verify:
+                from .. import company_fit
+                names = {r["company_domain"]: r.get("company_name") or "" for r in shortlist}
+                verdicts = company_fit.check([{"domain": d, "name": n} for d, n in names.items()], workers=12)
+                passing = {d for d in names if (verdicts.get(d) or {}).get("fit") in company_fit.PASS}
+                before = len(shortlist)
+                shortlist = [r for r in shortlist if r["company_domain"] in passing]
+                stats["contacts_dropped_fit"] = stats.get("contacts_dropped_fit", 0) + (before - len(shortlist))
+                db.log(run_id, "stage4", f"fit before verify: {len(passing)} of {len(names)} companies with contacts passed; "
+                       f"{before - len(shortlist)} contacts skipped before verification")
+                if not shortlist:
+                    continue
+
             verified = waterfall.verify_batch(shortlist, run_id=run_id)
             good: list[dict] = []
             for c in verified:

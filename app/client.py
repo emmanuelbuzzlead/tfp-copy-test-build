@@ -106,6 +106,8 @@ class Profile:
     # True: the sourcing step does not run its description-only LLM gate (it cost $2 to $3 per vertical and kept companies that fail on their own site).
     # Every company goes forward and the website fit check (fit_prompt.txt) decides before any contact is searched for.
     skip_source_gate: bool = False
+    # True: the website fit check runs on companies that have contacts, BEFORE their emails are verified (stage 4). Saves verification on non-fits.
+    fit_before_verify: bool = False
     mx_blocklist: bool = False
     company_custom_field: bool = False
     # Opt-in, for two clients that share one pool of firms (ProQ and MasterNow). All
@@ -414,6 +416,7 @@ def load(name: str | None = None) -> Profile:
         fit_screen_model=cfg.get("fit_screen_model") or None,
         fit_screen_only=bool(cfg.get("fit_screen_only", False)),
         skip_source_gate=bool(cfg.get("skip_source_gate", False)),
+        fit_before_verify=bool(cfg.get("fit_before_verify", False)),
         mx_blocklist=bool(cfg.get("mx_blocklist", False)),
         company_custom_field=bool(cfg.get("company_custom_field", False)),
         model_campaign_id=cfg.get("model_campaign_id"),
