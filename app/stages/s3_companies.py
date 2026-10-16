@@ -604,6 +604,8 @@ def _enforce_chunk(vertical: Vertical, chunk: list[dict],
     # check here: every company the providers return inside the band goes forward, and the research prompt
     # decides (stage 3b, runner._work_vertical, before any contact is found).
     # force_model: the supply probe still wants the model's keep rate, or every vertical would read 100%.
+    if client.profile().skip_source_gate and not force_model:
+        return {c.get("domain"): ("KEEP", "no source gate: the website fit check decides before contacts") for c in chunk}
     if client.profile().research_fit_gate and not force_model:
         return {c.get("domain"): ("KEEP", "fit is decided by the research prompt") for c in chunk}
     listing = [

@@ -1,11 +1,14 @@
-"""The first test run, executed BY THE WEB SERVICE (Emmanuel, 2026-10-15: "it should run on web, not locally").
+"""The test run and the scale-up, executed BY THE WEB SERVICE (Emmanuel, 2026-10-15: "it should run on web, not locally"; 2026-10-16: copy approved,
+scale to 1,500 leads today).
 
-Three steps, each resumable, each posting to the client's Slack channel:
-  1. source   find NEW companies for every declared vertical (modes.run_source, companies only: QuickEnrich and Lead Ocean search, then the fit judge)
-  2. contacts find and verify people at the fit companies, in chunks, until the bank holds TESTRUN_BANK_TARGET contacts
-  3. fill     wave1_fill.fill(): research and copy for the bank, then load up to [fill] target leads into each angle's DRAFT campaign (no senders, nothing sends)
-State lives in the testrun_state table, so a redeploy or crash continues where it stopped. It starts at boot only when TESTRUN_ENABLED=true and the
-pipeline kill switch (PIPELINE_ENABLED) is on. Nothing here attaches senders or starts a campaign.
+One loop, every step resumable, every cycle posted to the client's Slack channel:
+  1. source    find NEW companies for every declared vertical (modes.run_source, companies only). With skip_source_gate the vendor pull goes straight on.
+  2. fit       the website fit check (gpt-oss, same judge as the fill) on every company BEFORE any contact is searched for
+  3. contacts  find and verify people at the fit companies, in chunks, until the bank holds SCALE_BANK_PER_CYCLE usable contacts
+  4. fill      wave1_fill.fill(): research and copy for the bank, then load leads into each angle's DRAFT campaign up to the [fill] target
+Cycles repeat until SCALE_TARGET_LEADS leads sit in the campaigns, supply runs out, or SCALE_MAX_HOURS passes. When the pool of companies is empty it
+sources another, bigger round (SCALE_SOURCE_N contacts' worth per vertical, doubling). State lives in testrun_state, so a redeploy or crash continues.
+It starts at boot only when TESTRUN_ENABLED=true and PIPELINE_ENABLED is on. Nothing here attaches senders or starts a campaign.
 """
 from __future__ import annotations
 
@@ -30,7 +33,9 @@ def _load() -> dict:
     with db.cursor() as cur:
         cur.execute("SELECT state FROM testrun_state WHERE id = 1")
         row = cur.fetchone()
-    return (row["state"] if row and isinstance(row["state"], dict) else json.loads(row["state"])) if row else {}
+    if not row:
+        return {}
+    return row["state"] if isinstance(row["state"], dict) else json.loads(row["state"])
 
 
 def _save(state: dict) -> None:
@@ -75,8 +80,62 @@ def _bank() -> int:
         return int(cur.fetchone()["n"])
 
 
+def _loaded() -> int:
+    """Leads sitting in the angle campaigns (this database's own record of what the fill loaded)."""
+    with db.cursor() as cur:
+        cur.execute("SELECT count(*) n FROM contacts WHERE status = 'pushed' AND eb_campaign_id IN (SELECT campaign_id FROM copy_test_campaigns)")
+        return int(cur.fetchone()["n"])
+
+
+def _source_round(prof, st: dict, holder: str, n: int) -> int:
+    """One sourcing round over every declared vertical. Returns the number of new fit-pending companies staged."""
+    from . import modes
+    before = _staged()
+    _say(f"sourcing round {st.get('source_round', 0) + 1}: about {n} contacts' worth of NEW companies for each of {len(prof.verticals)} verticals.")
+    for i, v in enumerate(prof.verticals, 1):
+        _beat(holder)
+        try:
+            modes.run_source(prof, v, n, companies_only=True)
+        except Exception as exc:
+            st.setdefault("errors", []).append(f"{v}: {str(exc)[:120]}")
+        _save(st)
+        if i % 6 == 0:
+            _say(f"  sourcing {i}/{len(prof.verticals)} verticals, {_staged() - before} new companies so far.")
+    st["source_round"] = st.get("source_round", 0) + 1
+    added = _staged() - before
+    _say(f"sourcing round done: {added} new companies staged.")
+    return added
+
+
+def _staged() -> int:
+    with db.cursor() as cur:
+        cur.execute("SELECT count(*) n FROM staged_companies WHERE verdict = 'KEEP' AND consumed_at IS NULL")
+        return int(cur.fetchone()["n"])
+
+
+def _contact_chunks(prof, st: dict, holder: str, run_id: str, want: int) -> int:
+    """Fit-check then find contacts, chunk by chunk, until `want` usable contacts are banked or no companies are left. Returns chunks run."""
+    from . import company_fit, scaling
+    chunks = 0
+    while _bank() < want:
+        _beat(holder)
+        companies = scaling.pick_companies(list(prof.verticals), 200)
+        if not companies:
+            break
+        verdicts = company_fit.check([{"domain": c["domain"], "name": c.get("name") or ""} for c in companies], workers=12)
+        passing = [c for c in companies if (verdicts.get(c["domain"]) or {}).get("fit") in company_fit.PASS]
+        st["fit_checked"] = st.get("fit_checked", 0) + len(companies)
+        st["fit_passed"] = st.get("fit_passed", 0) + len(passing)
+        if passing:
+            scaling.source_contacts(passing, run_id)
+            chunks += 1
+        _save(st)
+        _say(f"fit check on {len(companies)} companies: {len(passing)} passed; contact finding done for them; {_bank()} usable contacts in the bank (cycle goal {want}).")
+    return chunks
+
+
 def run() -> dict:
-    from . import client, modes, scaling, wave1_fill
+    from . import client, wave1_fill
     from .runner import _run_id
 
     holder = f"testrun-{int(time.time())}"
@@ -84,62 +143,57 @@ def run() -> dict:
         return {"status": "already_running"}
     try:
         prof = client.profile()
-        per_v = int(os.getenv("TESTRUN_COMPANIES_PER_VERTICAL", "60"))
-        bank_target = int(os.getenv("TESTRUN_BANK_TARGET", "60"))
+        target_total = int(os.getenv("SCALE_TARGET_LEADS", "1500"))
+        bank_per_cycle = int(os.getenv("SCALE_BANK_PER_CYCLE", "450"))
+        source_n = int(os.getenv("SCALE_SOURCE_N", "150"))
+        deadline = time.time() + float(os.getenv("SCALE_MAX_HOURS", "14")) * 3600
         st = _load()
         if st.get("done"):
             return {"status": "done"}
-        st.setdefault("sourced", [])
-        verticals = [v for v in prof.verticals]
-        todo = [v for v in verticals if v not in st["sourced"]]
-        if todo:
-            _say(f"{prof.display_name} test run: sourcing new companies for {len(todo)} of {len(verticals)} verticals ({per_v} contacts' worth each), fit judged by gpt-oss.")
-        for i, v in enumerate(todo, 1):
-            _beat(holder)
-            try:
-                res = modes.run_source(prof, v, per_v, companies_only=True)
-                st["sourced"].append(v)
-                st.setdefault("by_vertical", {})[v] = res.get("companies", 0)
-            except Exception as exc:
-                st.setdefault("errors", []).append(f"{v}: {str(exc)[:120]}")
-            _save(st)
-            if i % 4 == 0 or i == len(todo):
-                _say(f"sourcing {len(st['sourced'])}/{len(verticals)} verticals done, {sum(st.get('by_vertical', {}).values())} fit companies so far.")
-        # contacts
+        st.setdefault("source_round", 1 if st.get("sourced") else 0)
         run_id = _run_id()
         db.start_run(run_id)
-        chunks = 0
-        while _bank() < bank_target and chunks < 15:
+        _say(f"{prof.display_name} scale-up started: goal {target_total} leads across the draft campaigns, {_loaded()} loaded so far, {_bank()} usable contacts banked.")
+        stalls = 0
+        while time.time() < deadline:
             _beat(holder)
-            companies = scaling.pick_companies(verticals, 150)
-            if not companies:
+            loaded = _loaded()
+            if loaded >= target_total:
                 break
-            # The real fit check (website text, same judge as the fill) BEFORE paying for contact finding: the sourcing gate reads only the vendor
-            # description and kept about a third of companies that fail on their own site (measured 2026-10-15: 26 of 84 contacts).
-            from . import company_fit
-            verdicts = company_fit.check([{"domain": c["domain"], "name": c.get("name") or ""} for c in companies], workers=6)
-            companies = [c for c in companies if (verdicts.get(c["domain"]) or {}).get("fit") in company_fit.PASS]
-            if not companies:
+            if _contact_chunks(prof, st, holder, run_id, bank_per_cycle) == 0 and _bank() == 0:
+                # no companies left to search: source another, bigger round
+                n = source_n * (2 ** max(st["source_round"] - 1, 0)) if st["source_round"] > 1 else source_n
+                added = _source_round(prof, st, holder, n)
+                if added < 150:
+                    stalls += 1
+                    if stalls >= 2:
+                        _say(f"supply is running out: {loaded} leads loaded, the last sourcing rounds added only {added} companies.")
+                        break
                 continue
-            scaling.source_contacts(companies, run_id)
-            chunks += 1
-            st["contact_chunks"] = st.get("contact_chunks", 0) + 1
+            _beat(holder)
+            _say(f"cycle: {_bank()} usable contacts banked, {loaded} of {target_total} leads loaded. Writing copy and loading drafts.")
+            out = wave1_fill.fill()
+            if (out or {}).get("status") == "already_running":     # the 2-hourly resume holds the fill lock: wait, do not count it as a stall
+                time.sleep(60)
+                continue
+            st["fill"] = {k: v for k, v in (out or {}).items() if k in ("status", "counts", "pulled")}
+            now = _loaded()
+            st["cycles"] = st.get("cycles", 0) + 1
             _save(st)
-            _say(f"contact finding: chunk {chunks} done ({len(companies)} companies searched), {_bank()} contacts in the bank (target {bank_target}).")
-        st["bank"] = _bank()
+            _say(f"cycle {st['cycles']} done: {now} of {target_total} leads loaded ({now - loaded} added). Per campaign: {st['fill'].get('counts')}.")
+            if now - loaded < 10:
+                stalls += 1
+                if stalls >= 3:
+                    _say(f"progress has stalled at {now} leads (three cycles added almost nothing). Stopping so you can look.")
+                    break
+            else:
+                stalls = 0
+        final = _loaded()
+        st["done"] = final >= target_total
+        st["final_loaded"] = final
         _save(st)
-        if st["bank"] == 0:
-            _say("no contacts were found at the sourced companies; stopping before the fill. Needs more companies or another contact source.")
-            return {"status": "no_contacts", "state": st}
-        # fill (copy + load into the draft campaigns)
-        _beat(holder)
-        _say(f"bank has {st['bank']} contacts. Writing copy and loading up to the per-angle target into the draft campaigns.")
-        out = wave1_fill.fill()
-        st["fill"] = {k: v for k, v in (out or {}).items() if k in ("status", "counts", "pulled")}
-        st["done"] = True
-        _save(st)
-        _say(f"test run finished: fill {st['fill']}")
-        return {"status": "done", "state": st}
+        _say(f"scale-up {'reached the goal' if st['done'] else 'stopped'}: {final} of {target_total} leads loaded into the draft campaigns. No senders attached; nothing sends.")
+        return {"status": "done" if st["done"] else "stopped", "state": st}
     finally:
         _release(holder)
 
@@ -151,6 +205,6 @@ def run_safe() -> None:
     except Exception as exc:
         print(f"[testrun] failed: {exc}", flush=True)
         try:
-            slack.post(f":warning: test run stopped: {str(exc)[:200]}. It resumes on the next deploy or restart.")
+            slack.post(f":warning: scale-up stopped: {str(exc)[:200]}. It resumes on the next deploy or restart.")
         except Exception:
             pass

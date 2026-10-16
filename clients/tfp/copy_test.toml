@@ -42,8 +42,8 @@ expand_verticals = 3
 leads_per_new_vertical = 300
 
 [fill]
-# Proof run size per angle. Raise only after the sample is approved.
-target = 15
+# Copy approved by Emmanuel 2026-10-16: 500 per angle, 1,500 leads across the three campaigns.
+target = 500
 
 [fit]
 b2b_product_makers = ""

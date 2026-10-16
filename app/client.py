@@ -103,6 +103,9 @@ class Profile:
     # TFP hard rules. mx_blocklist: never load a contact whose domain sits behind Mimecast or Barracuda (checked by MX record before copy is
     # written). company_custom_field: send COMPANY (legal suffixes stripped, 3 words at most) as a lead field, because the model campaign's
     # step 3 uses {{COMPANY}}.
+    # True: the sourcing step does not run its description-only LLM gate (it cost $2 to $3 per vertical and kept companies that fail on their own site).
+    # Every company goes forward and the website fit check (fit_prompt.txt) decides before any contact is searched for.
+    skip_source_gate: bool = False
     mx_blocklist: bool = False
     company_custom_field: bool = False
     # Opt-in, for two clients that share one pool of firms (ProQ and MasterNow). All
@@ -410,6 +413,7 @@ def load(name: str | None = None) -> Profile:
         countries=tuple(str(c).upper() for c in (cfg.get("countries") or ["US"])),
         fit_screen_model=cfg.get("fit_screen_model") or None,
         fit_screen_only=bool(cfg.get("fit_screen_only", False)),
+        skip_source_gate=bool(cfg.get("skip_source_gate", False)),
         mx_blocklist=bool(cfg.get("mx_blocklist", False)),
         company_custom_field=bool(cfg.get("company_custom_field", False)),
         model_campaign_id=cfg.get("model_campaign_id"),

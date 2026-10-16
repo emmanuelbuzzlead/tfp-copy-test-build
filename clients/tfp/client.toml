@@ -72,6 +72,7 @@ fit_screen_model = "openai/gpt-oss-120b"
 fit_screen_only = true
 
 # TFP hard rules (memory tfp-mx-blocklist-rule, tfp-copy-field-standards): never load Mimecast or Barracuda contacts; COMPANY is cleaned to 3 words.
+skip_source_gate = true
 mx_blocklist = true
 company_custom_field = true
 # Research inputs per TFP-COPY-SPEC section 2: Jina home page plus up to 5 internal pages picked by these words (safety, then locations,
