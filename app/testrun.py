@@ -122,15 +122,21 @@ def _contact_chunks(prof, st: dict, holder: str, run_id: str, want: int) -> int:
         companies = scaling.pick_companies(list(prof.verticals), 200)
         if not companies:
             break
-        verdicts = company_fit.check([{"domain": c["domain"], "name": c.get("name") or ""} for c in companies], workers=12)
-        passing = [c for c in companies if (verdicts.get(c["domain"]) or {}).get("fit") in company_fit.PASS]
-        st["fit_checked"] = st.get("fit_checked", 0) + len(companies)
+        # Contacts FIRST (Emmanuel, 2026-10-16): the website fit check costs a site read per company, and only about half of the companies yield
+        # a contact, so judge only the companies that have someone to email. Nothing is copied or loaded before the verdict (bank and fill both
+        # skip rejected companies), so a non-fit still never reaches EmailBison.
+        people = scaling.source_contacts(companies, run_id)
+        found = {(p.get("company_domain") or p.get("domain")) for p in people}
+        with_contacts = [c for c in companies if c["domain"] in found]
+        verdicts = company_fit.check([{"domain": c["domain"], "name": c.get("name") or ""} for c in with_contacts], workers=12) if with_contacts else {}
+        passing = [c for c in with_contacts if (verdicts.get(c["domain"]) or {}).get("fit") in company_fit.PASS]
+        st["searched"] = st.get("searched", 0) + len(companies)
+        st["with_contacts"] = st.get("with_contacts", 0) + len(with_contacts)
+        st["fit_checked"] = st.get("fit_checked", 0) + len(with_contacts)
         st["fit_passed"] = st.get("fit_passed", 0) + len(passing)
-        if passing:
-            scaling.source_contacts(passing, run_id)
-            chunks += 1
+        chunks += 1
         _save(st)
-        _say(f"fit check on {len(companies)} companies: {len(passing)} passed; contact finding done for them; {_bank()} usable contacts in the bank (cycle goal {want}).")
+        _say(f"{len(companies)} companies searched, {len(with_contacts)} had contacts and were fit-checked, {len(passing)} passed; {_bank()} usable contacts in the bank (cycle goal {want}).")
     return chunks
 
 
