@@ -216,6 +216,17 @@ def sweep(angles: dict, campaign_of: dict, run_id: str) -> dict:
                                    drop_reason='failed current copy rules on read-back' WHERE email=%s""",
                                 [((l.get("email") or "").lower(),) for l in bad])
         ghosts = 0
+        # A page that comes back empty mid-walk (rate limit, a slow answer) used to end the walk early, and every lead after that point looked
+        # absent: 359 loaded leads were moved to "held" on 2026-10-16 while EmailBison still held them. Only trust the listing when it covers
+        # (almost) every lead EmailBison says the campaign has.
+        if complete:
+            try:
+                total = int((emailbison.get_campaign(cid) or {}).get("total_leads") or 0)
+            except Exception:
+                total = 0
+            if total and len(present) < 0.98 * total:
+                db.log(run_id, "wave1_fill", f"sweep {a}: lead listing incomplete ({len(present)} of {total}); ghost check skipped", level="warn")
+                complete = False
         if complete:
             # The database must not claim a lead EmailBison does not hold (found 2026-10-09: 9 of 45 were recorded as loaded but were
             # never in the campaign). Put such contacts back so the fill counts the real campaign.
@@ -499,7 +510,10 @@ def fill(post: bool = True) -> dict:
                            FROM contacts c LEFT JOIN company_funnel f ON f.domain = c.company_domain
                            -- label contacts_found_not_sent: funnel_dedupe re-labels a sourced company that already has contacts and history_backfill2 sets it to tier 9; those are OUR bank, not suppressed (found 2026-10-16, 597 contacts were stranded)
                            -- f.domain IS NULL: contacts found for newly staged schools, which have no tier row yet (261 sat unused 2026-10-11)
-                           WHERE (f.tier = 1 OR f.domain IS NULL OR f.label = 'contacts_found_not_sent' OR c.source = 'reuse_tier2')      -- + leads a stopped batch left behind
+                           -- staged: a contact at a company OUR sourcing found is ours even after the company turns "previously contacted" because
+                           -- a sibling was loaded and synced; those siblings were stranded and stopped the scale-up (found 2026-10-19, 107 contacts)
+                           WHERE (f.tier = 1 OR f.domain IS NULL OR f.label = 'contacts_found_not_sent' OR c.source = 'reuse_tier2'
+                                  OR EXISTS (SELECT 1 FROM staged_companies s WHERE s.domain = c.company_domain))      -- + leads a stopped batch left behind
                              AND NOT coalesce(f.replied, false) AND c.status = 'verified'
                              AND c.eb_campaign_id IS NULL AND coalesce(c.first_name, '') <> ''
                              AND coalesce(c.personalization_1, '') = ''

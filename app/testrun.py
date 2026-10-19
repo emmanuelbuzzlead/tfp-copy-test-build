@@ -220,8 +220,11 @@ def run() -> dict:
                     _say(f"copy cycle {st.get('cycles')}: {now} of {target_total} leads loaded ({now - loaded} added). Bank: {_bank()}.")
                 low_cycles = low_cycles + 1 if now - loaded < 10 else 0
                 if low_cycles >= 4:
-                    _say(f"progress has stalled at {now} leads (four copy cycles added almost nothing). Stopping so you can look.")
-                    break
+                    # It used to STOP here (2026-10-16, 20:39 UTC) and nobody restarted it. Now it says so, waits, and keeps trying: the producer keeps
+                    # finding contacts, so a stall that clears by itself (a provider back, a fix deployed) is picked up without anyone restarting anything.
+                    _say(f"progress is slow: {now} leads loaded, four copy cycles added almost nothing. Bank {_bank()}. Still running; trying again in 10 minutes.")
+                    time.sleep(600)
+                    low_cycles = 2
             elif flags["supply_done"]:
                 break          # nothing banked and nothing left to find
             else:
@@ -247,3 +250,23 @@ def run_safe() -> None:
             slack.post(f":warning: scale-up stopped: {str(exc)[:200]}. It resumes on the next deploy or restart.")
         except Exception:
             pass
+
+
+_thread: threading.Thread | None = None
+
+
+def ensure_running() -> str:
+    """Watchdog: start the scale-up if it is not running and not finished. Called at boot and every few minutes by the web service, so a stop (a stall
+    guard, a crash, a restart) never leaves the system idle with companies still waiting."""
+    global _thread
+    if _thread is not None and _thread.is_alive():
+        return "running"
+    try:
+        st = _load()
+    except Exception:
+        return "state unreadable"
+    if st.get("done"):
+        return "done"
+    _thread = threading.Thread(target=run_safe, daemon=True)
+    _thread.start()
+    return "started"

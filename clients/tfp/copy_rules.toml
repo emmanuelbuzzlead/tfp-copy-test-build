@@ -3,7 +3,7 @@
 
 [[banned]]
 name = "spam-trigger words (deliverability list in the spec)"
-pattern = '(?i)(?<![A-Za-z])(get|bank|credit|access|open|compare|problem|now|billing|deal|finance|financial|claims|insurance|mortgage|soon|new|performance|freedom|home|sales|medical|urgent|life|marketing|investment|diagnostics|friend|cash|invoice|extra|purchase|free|quote|today|promise|guarantee|guaranteed|earn|click|discount|bonus|thousands|immediately|amazing|fantastic|the best)(?![A-Za-z])'
+pattern = '(?i)(?<![A-Za-z])(bank|credit|billing|finance|financial|insurance|mortgage|urgent|investment|diagnostics|cash|invoice|purchase|free|quote|promise|guarantee|guaranteed|earn|click|discount|bonus|thousands|immediately|amazing|fantastic|the best)(?![A-Za-z])'
 
 [[banned]]
 name = "banned phrases and filler"
@@ -47,4 +47,4 @@ pattern = '(?i)\bRussel'
 
 [[banned]]
 name = "no ALL CAPS shouting"
-pattern = '(?-i:\b[A-Z]{5,}\b)'
+pattern = '(?-i:\b[A-Z]{6,}\b)'

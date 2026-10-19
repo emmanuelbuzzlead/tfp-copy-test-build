@@ -92,7 +92,17 @@ async def lifespan(_: FastAPI):
                     _cur.execute("DELETE FROM job_locks WHERE name = %s", (testrun.LOCK,))
             except Exception as exc:
                 print(f"[startup] testrun lock release skipped: {exc}", flush=True)
-            threading.Thread(target=testrun.run_safe, daemon=True).start()
+            testrun.ensure_running()
+
+            def _watchdog() -> None:
+                import time as _t
+                while True:
+                    _t.sleep(300)
+                    try:
+                        testrun.ensure_running()
+                    except Exception as exc:
+                        print(f"[watchdog] scale-up check failed: {exc}", flush=True)
+            threading.Thread(target=_watchdog, daemon=True).start()
     yield
 
 

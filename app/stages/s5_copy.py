@@ -510,8 +510,16 @@ def generate(contact: dict, run_id: str) -> tuple[dict | None, str]:
     _copy_rules.set_context(variant, contact.get("first_name"))
 
     p1 = prompts.email1(_v)
-    _who = dict(company_name=contact.get("company_name") or contact.get("company_domain") or "",
-                job_title=contact.get("title") or "")
+    _co = contact.get("company_name") or contact.get("company_domain") or ""
+    if _prof.company_custom_field:
+        # Source names often arrive in ALL CAPS or with legal suffixes; the model echoes them and the ALL CAPS rule then holds the email
+        # (55 held 2026-10-19). Same cleaner as the COMPANY lead field: suffixes off, title case, three words at most.
+        try:
+            from ..company_name_cleaner import clean_company_name
+            _co = clean_company_name(_co) or _co
+        except Exception:
+            pass
+    _who = dict(company_name=_co, job_title=contact.get("title") or "")
     user1 = p1.render_user(research_report=report, client_overview=overview, **_who) + treatment
     body1, violations1, model1 = _generate_with_retry(
         p1, user1, validator.validate_email1, protected, "email1", run_id, email,

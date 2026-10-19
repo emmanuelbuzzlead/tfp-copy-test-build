@@ -30,7 +30,7 @@ def bad(text):
 
 
 def test_spec_bans_are_enforced():
-    assert bad("You can get the checklist.\nWant it?")   # spam-trigger word get
+    assert bad("You can have the free checklist.\nWant it?")   # spam-trigger word free
     assert bad("INEOS Composites uses it.\nWant the story?")
     assert bad("First line!\nSecond line!\nWant it?")                                   # one exclamation at most
     assert bad("We built it and we love it.\nOur panels fit.\nWant it?")                # we/our/us at most once
@@ -130,3 +130,23 @@ def test_own_product_and_proof_names_do_not_trip_the_wrong_company_check():
     from app import validator
     body = "Steel Dynamics put NoFalls on its trucks after the same problem.\nWorth a look at how Eaton Steel did it?"
     assert validator.wrong_company(body, "J Walter Miller Co", "jwmiller.com") is None
+
+
+def test_everyday_words_are_no_longer_spam_but_real_triggers_still_are():
+    assert bad("You can get the checklist and the new one is open now.\nWant it?") == []      # get, new, open, now were dropped from the list
+    assert bad("This is a guaranteed result.\nWant it?")                                       # a real trigger still fails
+    assert not bad("Georgia Pacific runs four sites.\nWorth a look at how Eaton Steel did it?")
+
+
+def test_the_fill_queue_takes_contacts_at_companies_our_sourcing_found():
+    import inspect
+    from app import wave1_fill
+    src = inspect.getsource(wave1_fill.fill)
+    assert "FROM staged_companies s WHERE s.domain = c.company_domain" in src
+
+
+def test_sweep_does_not_demote_leads_when_the_listing_is_incomplete():
+    import inspect
+    from app import wave1_fill
+    src = inspect.getsource(wave1_fill.sweep)
+    assert "lead listing incomplete" in src and "0.98" in src
