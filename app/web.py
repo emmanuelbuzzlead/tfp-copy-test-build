@@ -84,6 +84,9 @@ async def lifespan(_: FastAPI):
         threading.Thread(target=_resume_on_boot, daemon=True).start()
         threading.Thread(target=_resume_every_two_hours, daemon=True).start()
         import os as _os
+        if _os.environ.get("NIGHTLY_ENABLED", "").strip().lower() in ("1", "true", "yes"):
+            from . import nightly
+            nightly.start()          # daily copy-test check: scale the leader, decide at day 10 (after 700 sends each), pause losers
         if _os.environ.get("TESTRUN_ENABLED", "").strip().lower() in ("1", "true", "yes"):
             # The first test run (source, find contacts, write copy, load drafts) runs inside this service and resumes after a redeploy.
             from . import testrun
@@ -127,7 +130,7 @@ def _require_upload_token(authorization: str | None) -> None:
 _LAZY_IMPORTS = [
     "app.testgrid", "app.company_fit", "app.cost_tests", "app.scaling",
     "app.wave1_fill", "app.clients.leadocean", "app.modes", "app.report",
-    "app.taxonomy", "app.stages.s7_push", "app.stages.s8_review", "app.runner",
+    "app.taxonomy", "app.stages.s7_push", "app.stages.s8_review", "app.runner", "app.nightly", "app.angle_derivation",
 ]
 
 _HEALTH_TABLES = [

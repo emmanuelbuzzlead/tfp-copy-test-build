@@ -255,11 +255,18 @@ decision_day = 10
 positive_events = ["interested", "booked"]
 random_deal_seed = "tfp-angles-1"
 booked_weight = 3
+min_sends_per_angle = 700
 
 [angle_prompts]
 A5  = "a5-load-type"
 A7  = "a7-carrier-liability"
 A10 = "a10-peer-proof"
+
+[angle_learning]
+# Lookalike angles after a day-10 winner (Emmanuel, 2026-10-19). clone_parent keeps the winner's approved proofs and rules and replaces only its angle section.
+enabled = true
+mode = "clone_parent"
+campaign_prefix = "TFP_W1_"
 
 [scaling]
 champion_topup = 1000

@@ -150,3 +150,94 @@ def test_sweep_does_not_demote_leads_when_the_listing_is_incomplete():
     from app import wave1_fill
     src = inspect.getsource(wave1_fill.sweep)
     assert "lead listing incomplete" in src and "0.98" in src
+
+
+def _rows(a=(1000, 700, 3, 0), b=(1000, 700, 1, 0), c=(1000, 700, 0, 0)):
+    mk = lambda t: {"leads": t[0], "sent": t[1], "replied": 10, "interested": t[2], "booked": t[3], "positive": t[2] + t[3]}
+    return {"A5": mk(a), "A7": mk(b), "A10": mk(c)}
+
+
+def _cfg():
+    from app import testgrid
+    return {"rules": {"freeze_days": 7, "decision_day": 10, "booked_weight": 3, "min_sends_per_angle": 700}, "angles": ["A5", "A7", "A10"]}
+
+
+def test_nothing_is_decided_until_every_angle_has_sent_the_minimum(monkeypatch):
+    from datetime import datetime, timezone
+    from app import testgrid, db
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, *a, **k): pass
+        def fetchall(self): return []
+    monkeypatch.setattr(db, "cursor", lambda: Cur())
+    launched, now = datetime(2026, 10, 16, tzinfo=timezone.utc), datetime(2026, 10, 27, tzinfo=timezone.utc)
+    short = _rows(c=(1000, 650, 0, 0))
+    v = testgrid.decide(short, launched, _cfg(), now)
+    assert v["status"] == "monitoring" and v["waiting_for_volume"] == {"A10": 650}
+    v = testgrid.decide(_rows(), launched, _cfg(), now)
+    assert v["status"] == "decided" and v["winner"] == "A5" and "per email sent" in v["reason"]
+
+
+def test_scoring_is_per_email_sent_not_per_lead_loaded(monkeypatch):
+    from app import testgrid
+    slow = {"leads": 1500, "sent": 700, "replied": 5, "interested": 2, "booked": 0}      # 2 per 700 sent
+    fast = {"leads": 1500, "sent": 1400, "replied": 5, "interested": 3, "booked": 0}     # 3 per 1400 sent: lower per send, higher raw
+    assert testgrid._score(slow, 3)[0] > testgrid._score(fast, 3)[0]
+    assert testgrid._score({"leads": 100, "replied": 0, "interested": 1, "booked": 0}, 3)[0] == 0.01   # no sends known: falls back to per lead
+
+
+def test_nightly_status_is_plain_and_lists_each_angle():
+    from app import nightly
+    txt = nightly.status_text({"status": "monitoring", "by_angle": _rows(), "reason": "frozen until 23 Oct"})
+    assert "A5: 700 sent, 1,000 loaded" in txt and "frozen until 23 Oct" in txt
+
+
+def test_lookalike_clone_keeps_the_parents_proofs_and_swaps_only_the_angle():
+    from pathlib import Path
+    from app import angle_derivation as ad
+    base = Path(__file__).resolve().parent.parent / "clients" / "tfp" / "prompts" / "a10-peer-proof"
+    prop = {"reasoning": "loss framing", "pitch_one_liner": "A peer already pays for this exposure.", "display_name": "Peer Cost",
+            "email1_voice": "Open with the exposure at their named site, then the peer.", "email2_voice": "Offer one product fact."}
+    e1 = ad._clone_prompt((base / "prompt_email1.txt").read_text(encoding="utf-8"), "email1", "peer-cost", "A10", prop)
+    assert "Open with the exposure at their named site" in e1 and "P1:" in e1 and "NEVER MENTION" in e1 and "DATA YOU RECEIVE" in e1
+    assert "single_site:" not in e1 and 'angle "Peer Cost"' in e1 and "VARIANT: peer-cost" in e1.split("\n")[1]
+    e2 = ad._clone_prompt((base / "prompt_email2.txt").read_text(encoding="utf-8"), "email2", "peer-cost", "A10", prop)
+    assert 'angle is "Peer Cost"' in e2 and "Offer one product fact." in e2 and "PROOF LIBRARY" in e2
+    r = ad._clone_prompt((base / "prompt_research.txt").read_text(encoding="utf-8"), "research", "peer-cost", "A10", prop)
+    assert "company_short" in r and "VARIANT: peer-cost" in r
+
+
+def test_angle_learning_is_on_for_tfp_in_clone_mode():
+    from app import angle_derivation as ad
+    assert ad._enabled() and ad._clone_mode() and ad._campaign_prefix() == "TFP_W1_"
+    assert "Truck Fall Prevention" in ad._brainstorm_system() and "ProductEVO" not in ad._brainstorm_system()
+
+
+def test_no_winner_is_named_and_nobody_is_paused_when_nobody_has_a_positive_reply(monkeypatch):
+    from datetime import datetime, timezone
+    from app import testgrid, db
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, *a, **k): pass
+        def fetchall(self): return []
+    monkeypatch.setattr(db, "cursor", lambda: Cur())
+    v = testgrid.decide(_rows(a=(1000, 800, 0, 0), b=(1000, 800, 0, 0), c=(1000, 800, 0, 0)), datetime(2026, 10, 16, tzinfo=timezone.utc), _cfg(),
+                        datetime(2026, 10, 27, tzinfo=timezone.utc))
+    assert v["status"] == "monitoring" and "nobody is paused on a tie" in v["reason"]
+
+
+def test_sends_and_replies_come_from_emailbison_counters(monkeypatch):
+    from app import testgrid, db
+    from app.clients import emailbison
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, *a, **k): pass
+        def fetchall(self): return [{"angle": "A5", "campaign_id": 1}]
+    monkeypatch.setattr(db, "cursor", lambda: Cur())
+    monkeypatch.setattr(emailbison, "get_campaign", lambda cid: {"emails_sent": 665, "unique_replies": 8, "interested": 2})
+    rows = {"A5": {"leads": 10, "replied": 0, "interested": 0, "booked": 1, "positive": 1}}
+    testgrid._attach_sends(rows, {})
+    assert rows["A5"] == {"leads": 10, "replied": 8, "interested": 2, "booked": 1, "positive": 3, "sent": 665}

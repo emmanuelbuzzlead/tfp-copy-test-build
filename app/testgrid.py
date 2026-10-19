@@ -269,6 +269,13 @@ def _value(row: dict, booked_weight: int) -> int:
     return int(row["interested"]) + booked_weight * int(row["booked"])
 
 
+def _score(row: dict, booked_weight: int) -> tuple[float, float]:
+    """(positive value, replies) per email SENT when the row carries sends, else per lead loaded (Emmanuel, 2026-10-19: leads sit loaded for days
+    before a mailbox reaches them, so per-lead rewards the angle that happened to send least)."""
+    base = max(int(row["sent"]), 1) if row.get("sent") is not None else max(int(row["leads"]), 1)
+    return _value(row, booked_weight) / base, int(row.get("replied") or 0) / base
+
+
 def decide(by_angle: dict[str, dict], launched_at: datetime, cfg: dict,
            now: datetime | None = None) -> dict:
     """Troy, 2026-10-07: "to not complicate this... after 10 days, when we find our
@@ -316,13 +323,24 @@ def decide(by_angle: dict[str, dict], launched_at: datetime, cfg: dict,
     if len(by_angle) < 3:
         return {**base, "status": "monitoring", "reason": "fewer than 3 angles still have data; nothing to rank"}
 
-    rate = lambda row: _value(row, w) / max(int(row["leads"]), 1)
-    ranked = sorted(by_angle.items(), key=lambda kv: rate(kv[1]), reverse=True)
+    # Emmanuel, 2026-10-19: "i want 700 minimum." No angle is judged until each has SENT this many emails; day 10 alone is not enough.
+    min_sends = int(r.get("min_sends_per_angle", 0) or 0)
+    short = {a: int(row["sent"]) for a, row in by_angle.items() if row.get("sent") is not None and int(row["sent"]) < min_sends}
+    if short:
+        return {**base, "status": "monitoring", "waiting_for_volume": short,
+                "reason": f"day {r.get('decision_day', 10)} has passed but every angle needs {min_sends} emails sent before a call; still short: "
+                          + ", ".join(f"{a} {n}" for a, n in sorted(short.items()))}
+    ranked = sorted(by_angle.items(), key=lambda kv: _score(kv[1], w), reverse=True)
     winner, winner_row = ranked[0]
+    if _value(winner_row, w) <= 0:
+        return {**base, "status": "monitoring",
+                "reason": f"day {r.get('decision_day', 10)} has passed but no angle has a single interested or booked reply yet, so there is nothing to rank; "
+                          f"nobody is paused on a tie"}
     losers = [a for a, _ in ranked[1:]]
-    detail = ", ".join(f"{a} {rate(rw):.2%}" for a, rw in ranked)
+    unit = "per email sent" if winner_row.get("sent") is not None else "per lead"
+    detail = ", ".join(f"{a} {_score(rw, w)[0]:.2%}" for a, rw in ranked)
     return {**base, "status": "decided", "winner": winner, "losers": losers,
-            "reason": f"{winner} leads per lead ({detail}); scaling {winner} only, killing {' and '.join(losers)}"}
+            "reason": f"{winner} leads {unit} ({detail}); scaling {winner} only, killing {' and '.join(losers)}"}
 
 
 def record_champion(angle: str, campaign_id: int, separated: bool, reason: str) -> None:
@@ -693,6 +711,31 @@ def evaluate_and_record() -> dict:
         _release_decision_lock(holder)
 
 
+def _attach_sends(by_angle: dict, camps: dict) -> None:
+    """Add 'sent' (emails EmailBison reports sent, summed over the angle's campaigns) to each angle row. Left off if EmailBison cannot be read, so
+    the rules fall back to per-lead instead of judging on a half-read number."""
+    from .clients import emailbison
+    with db.cursor() as cur:
+        cur.execute("SELECT angle, campaign_id FROM copy_test_campaigns")
+        ids: dict[str, list[int]] = {}
+        for r in cur.fetchall():
+            ids.setdefault(r["angle"], []).append(int(r["campaign_id"]))
+    for angle, row in by_angle.items():
+        try:
+            live = [emailbison.get_campaign(cid) or {} for cid in ids.get(angle, [])]
+            row["sent"] = sum(int(c.get("emails_sent") or 0) for c in live)
+            # EmailBison's own counters, not only our outcome_events (that table is filled by the reply sweep, which this build does not run on a
+            # timer: it was empty on 2026-10-19 while EmailBison showed 18 replies). The larger of the two wins, so neither source can hide a reply.
+            row["replied"] = max(int(row.get("replied") or 0), sum(int(c.get("unique_replies") or 0) for c in live))
+            row["interested"] = max(int(row.get("interested") or 0), sum(int(c.get("interested") or 0) for c in live))
+            row["positive"] = int(row["interested"]) + int(row.get("booked") or 0)
+        except Exception as exc:
+            db.log(None, "testgrid", f"could not read sends for {angle}: {exc}", level="warn")
+            for other in by_angle.values():
+                other.pop("sent", None)
+            return
+
+
 def _evaluate_and_record_locked() -> dict:
     cfg = load_config()
     if cfg is None:
@@ -709,6 +752,7 @@ def _evaluate_and_record_locked() -> dict:
         return {"status": "no_data", "reason": "test campaigns are not all registered and launched"}
     launched = min(c["launched_at"] for c in camps.values())
     roll = rollup(read_grid(), cfg)
+    _attach_sends(roll["by_angle"], camps)
     verdict = decide(roll["by_angle"], launched, cfg)
 
     if verdict["status"] == "decided" and not _decision_already_recorded():
@@ -746,8 +790,9 @@ def _evaluate_and_record_locked() -> dict:
         # (no separation required), once. auto_expand_champion's per-angle guard makes
         # this safe to call every night: it only spends on a given angle once this test.
         w = int(r["booked_weight"]) if (r := cfg["rules"]) else 3
-        rate = lambda row: _value(row, w) / max(int(row["leads"]), 1)
-        leader = max(roll["by_angle"], key=lambda a: rate(roll["by_angle"][a]))
+        leader = max(roll["by_angle"], key=lambda a: _score(roll["by_angle"][a], w))
+        if _value(roll["by_angle"][leader], w) <= 0:
+            return {**verdict, **roll}          # nobody has a single positive reply yet: there is no leader to scale
         with db.cursor() as cur:
             _scale_targets_schema(cur)
             # Found 2026-10-08: this used to check copy_test_expansions, a table

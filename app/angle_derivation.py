@@ -240,6 +240,65 @@ Competitors:
 """
 
 
+def _campaign_prefix() -> str:
+    """Campaign-name prefix for a launched lookalike: [angle_learning] campaign_prefix, default ProductEVO's."""
+    try:
+        from . import testgrid
+        return ((testgrid.load_config() or {}).get("angle_learning") or {}).get("campaign_prefix", "PEVO_W1_")
+    except Exception:
+        return "PEVO_W1_"
+
+
+def _brainstorm_system() -> str:
+    """The client's own brainstorm brief (clients/<client>/angle_brainstorm.txt) when it has one, else the ProductEVO text above."""
+    f = _client_dir() / "angle_brainstorm.txt"
+    return f.read_text(encoding="utf-8") if f.exists() else _BRAINSTORM_SYSTEM
+
+
+def _clone_mode() -> bool:
+    """[angle_learning] mode = "clone_parent": the derived angle's prompts are the winning angle's own prompt files with only the angle section
+    replaced, so every proof, product fact and copy rule the client already approved carries over untouched (TFP, 2026-10-19)."""
+    try:
+        from . import testgrid
+        return ((testgrid.load_config() or {}).get("angle_learning") or {}).get("mode") == "clone_parent"
+    except Exception:
+        return False
+
+
+def _clone_prompt(parent_text: str, kind: str, angle_id: str, parent_angle: str, proposal: dict) -> str:
+    """Parent prompt text -> the derived angle's prompt. kind: email1 | email2 | research."""
+    today = time.strftime("%Y-%m-%d")
+    head = (f"SOURCE: self-learning angle derivation, proposed {today} off the winning angle {parent_angle}, cloned from its approved prompt. "
+            f"Reasoning: {proposal['reasoning']}\n"
+            f"VARIANT: {angle_id} -- {proposal['pitch_one_liner']}\n")
+    lines = parent_text.split("\n")
+    body = "\n".join(lines[2:]) if lines and lines[0].startswith("SOURCE:") else parent_text
+    if kind == "research":
+        return head + body
+    voice = proposal["email1_voice"] if kind == "email1" else proposal["email2_voice"]
+    name = proposal["display_name"]
+    if kind == "email2":
+        new, n = re.subn(r"This sequence's angle is \"[^\"]*\": stay in that angle, with a new element\.",
+                         lambda m: f"This sequence's angle is \"{name}\": stay in that angle, with a new element. {voice}", body, count=1)
+        if not n:
+            raise RuntimeError(f"cannot clone {parent_angle}'s email 2 prompt: the angle sentence was not found")
+        return head + new
+    # email 1: keep the parent's data and never-mention paragraphs and everything from PROOF CHOICE down; replace the angle and how-to-write sections
+    m_proof = re.search(r"\nPROOF CHOICE", body)
+    m_intro = re.search(r"^(.*?)\nTHE ANGLE", body, flags=re.S)
+    if not (m_proof and m_intro):
+        raise RuntimeError(f"cannot clone {parent_angle}'s email 1 prompt: 'THE ANGLE' or 'PROOF CHOICE' marker is missing")
+    keep = []
+    for key in ("DATA YOU RECEIVE.", "NEVER MENTION"):
+        m = re.search(r"\n(" + re.escape(key) + r".*?)(?=\n\n)", body, flags=re.S)
+        if m:
+            keep.append(m.group(1))
+    intro = re.sub(r"angle \"[^\"]*\"", lambda m: f"angle \"{name}\"", m_intro.group(1))
+    new = (intro + "\nTHE ANGLE\n\n" + proposal["pitch_one_liner"] + "\n\n" + "\n\n".join(keep) +
+           "\n\nHow to write it\n" + voice + "\n\n" + body[m_proof.start() + 1:])
+    return head + new
+
+
 def _parent_reference(parent_angle: str) -> str:
     from . import testgrid
     cfg = testgrid.load_config()
@@ -267,7 +326,7 @@ def _brainstorm(parent_angle: str) -> list[dict]:
     # provider confirmed to serve Opus 5.5 by model id in this codebase; "copy" tries
     # Concentrate first and has no Anthropic fallback, an unnecessary risk for a one-off
     # strategic call that isn't on the hot path.
-    out = llm.complete_json("anthropic/claude-opus-5.5", _BRAINSTORM_SYSTEM, user, 0.8, max_tokens=4000,
+    out = llm.complete_json("anthropic/claude-opus-5.5", _brainstorm_system(), user, 0.8, max_tokens=4000,
                             provider="precopy")
     angles = (out or {}).get("angles") if isinstance(out, dict) else None
     if not isinstance(angles, list) or len(angles) < 2:
@@ -291,6 +350,17 @@ def _write_prompt_files(angle_id: str, parent_angle: str, proposal: dict) -> Pat
     today = time.strftime("%Y-%m-%d")
     ctx = {"date": today, "parent": parent_angle, "angle_id": angle_id,
           "pitch": proposal["pitch_one_liner"], "reasoning": proposal["reasoning"]}
+    if _clone_mode():
+        from . import testgrid
+        variant = (testgrid.load_config().get("angle_prompts") or {}).get(parent_angle, parent_angle.lower())
+        files = {}
+        for kind, stem in (("email1", "prompt_email1.txt"), ("email2", "prompt_email2.txt"), ("research", "prompt_research.txt")):
+            parent_text = (_prompts_root() / variant / stem).read_text(encoding="utf-8")
+            files[stem] = _clone_prompt(parent_text, kind, angle_id, parent_angle, proposal)
+        for name, content in files.items():
+            (folder / name).write_text(content, encoding="utf-8")
+        _persist_prompt_files(angle_id, files)
+        return folder
     files = {
         "prompt_email1.txt": _EMAIL1_WRAPPER.format(**ctx, voice=proposal["email1_voice"]),
         "prompt_email2.txt": _EMAIL2_WRAPPER.format(**ctx, voice=proposal["email2_voice"]),
@@ -358,10 +428,11 @@ def _draft_sample(angle_id: str, company: dict) -> dict:
     overview = _pitch_md_path().read_text(encoding="utf-8") if _pitch_md_path().exists() else ""
     p1 = _prompts.email1(angle_id)
     report = company["research_report"]
-    user1 = p1.render_user(research_report=report, client_overview=overview)
+    who = dict(company_name=company.get("company_name") or company.get("company_domain") or "", job_title=company.get("title") or "")
+    user1 = p1.render_user(research_report=report, client_overview=overview, **who)
     body1 = llm.complete(p1.model, p1.system, user1, p1.temperature, p1.max_tokens, provider="copy")
     p2 = _prompts.email2(angle_id)
-    user2 = p2.render_user(email_1_output=body1, research_report=report, client_overview=overview)
+    user2 = p2.render_user(email_1_output=body1, research_report=report, client_overview=overview, **who)
     body2 = llm.complete(p2.model, p2.system, user2, p2.temperature, p2.max_tokens, provider="copy")
     return {"company": company["company_name"] or company["company_domain"],
             "title": company.get("title"), "email1": body1, "email2": body2}
@@ -437,7 +508,7 @@ def launch_new_test_angle(angle_id: str, parent_angle: str, target_leads: int = 
     model_id = int(row["campaign_id"])
 
     display = angle_id.replace("-", " ").title()
-    created = emailbison.duplicate_campaign(model_id, f"PEVO_W1_{angle_id.upper().replace('-', '_')}")
+    created = emailbison.duplicate_campaign(model_id, f"{_campaign_prefix()}{angle_id.upper().replace('-', '_')}")
     new_campaign_id = int(created["id"])
 
     # Wire the angle into copy_test.toml and register it -- same structure the other
