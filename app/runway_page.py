@@ -138,6 +138,15 @@ def page_html() -> str:
             "Nothing sends from here: the campaigns are drafts with no senders attached."]
     recs_html = "".join(f"<li>{escape(x)}</li>" for x in recs)
     now = datetime.now(timezone.utc).strftime("%b %d, %H:%M UTC")
+    og_html = ""
+    og = n.get("og")
+    if og:
+        live = (f" It has sent {og['sent']:,} emails so far and {og['interested']:,} leads are marked interested." if og.get("sent") else " Nothing has been sent yet.")
+        og_html = (f'<h2>{escape(str(og.get("name") or "Original copy campaign"))} (campaign {og["campaign"]})</h2><div class="panel">'
+                   + _row("Leads loaded", og["loaded"], og["target"], f"{og['loaded']:,} of {og['target']:,} (goal 3,000 to 3,500)", "g")
+                   + _row("Held: could not say what they haul", og["held_unclear"], max(og["loaded"], 1), f"{og['held_unclear']:,}", "a")
+                   + _row("Held: broke the name or materials rules", og["held_standard"], max(og["loaded"], 1), f"{og['held_standard']:,}", "a")
+                   + f'<p class="sub">Original copy with each lead\'s company name and what they haul filled in. Safety and EHS titles load first. +{og["per_hour"]:,} in the last hour.{escape(live)}</p></div>')
     cards = "".join([
         _card(f"{loaded:,}", "Leads loaded", "in the three draft campaigns"),
         _card(f"{n['bank']:,}", "Contacts ready for copy", "verified, at companies that passed the fit check"),
@@ -150,7 +159,7 @@ def page_html() -> str:
 <div class="hero"><div class="big">{loaded:,} of {goal:,} leads loaded ({_pct(loaded, goal)}%)</div>
 <div class="sub">{n['target']:,} per campaign, three campaigns. The companies found so far can supply about {int(n['potential']):,} leads ({_pct(n['potential'], goal)}% of the goal).{escape(eta)}</div>
 <span class="pill {tone}">{escape(tone_txt)}</span></div>
-<div class="cards">{cards}</div>
+{og_html}<div class="cards">{cards}</div>
 <h2>Leads by campaign</h2><div class="panel">{angle_rows}</div>
 <h2>From companies to leads</h2><div class="panel">{funnel}
 <p class="sub">About {n['cps']:.1f} contacts come out of every company searched, so the {n['left']:,} companies left are worth roughly {int(n['left'] * n['cps']):,} contacts.</p></div>

@@ -58,7 +58,12 @@ def numbers() -> dict:
     cps = contact_rows / searched if searched else 0.5            # contacts per searched company, measured
     pool_contacts = bank + left * cps
     potential = loaded + pool_contacts * ASSUMED_COPY_PASS
-    return dict(goal=goal, target=t["target"], loaded=loaded, loaded_by=loaded_by, per_hour=per_hour, bank=bank, held=held, sourced=sourced,
+    try:
+        from . import materials_fill
+        og = materials_fill.status()
+    except Exception:
+        og = None
+    return dict(og=og, goal=goal, target=t["target"], loaded=loaded, loaded_by=loaded_by, per_hour=per_hour, bank=bank, held=held, sourced=sourced,
                 searched=searched, left=left, with_contacts=with_contacts, contact_rows=contact_rows, fit_failed=fit_failed, cps=cps,
                 potential=potential)
 
@@ -87,7 +92,10 @@ def report() -> str:
     if n["per_hour"] > 0 and n["goal"] > n["loaded"]:
         hours = (min(n["potential"], n["goal"]) - n["loaded"]) / n["per_hour"]
         eta = f" At the last hour's pace ({n['per_hour']:,}/h) the pool runs out in about {hours:.1f} h."
-    return "\n".join([
+    og = n.get("og")
+    og_line = ([f"*OG copy campaign {og['campaign']}:* {og['loaded']:,} of {og['target']:,} loaded | last hour +{og['per_hour']:,} | held {og['held_unclear']:,} unclear, "
+                f"{og['held_standard']:,} failed the field standards"] if og else [])
+    return "\n".join(og_line + [
         f"*TFP runway* ({datetime.now(timezone.utc).strftime('%H:%M')} UTC)",
         f"*Leads:* {n['loaded']:,} of {n['goal']:,} ({pct(n['loaded'], n['goal'])}) | {angles} | target {n['target']:,} each | last hour +{n['per_hour']:,}",
         f"*Contacts:* {n['bank']:,} ready for copy | {n['held']:,} held | {n['loaded']:,} loaded",

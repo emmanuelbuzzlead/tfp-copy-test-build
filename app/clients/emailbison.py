@@ -151,6 +151,8 @@ def _lead_payload(contact: dict) -> dict:
             custom_company = {"COMPANY": clean_company_name(contact.get("company_name") or contact.get("company_domain") or "")}
     except Exception:
         custom_company = {}
+    if contact.get("materials_hauled"):
+        custom_company["MATERIALS_HAULED"] = contact["materials_hauled"]     # the OG-copy campaigns merge {{MATERIALS_HAULED}} (app/materials.py)
     return {
         "email": contact["email"],
         "first_name": contact.get("first_name") or "",

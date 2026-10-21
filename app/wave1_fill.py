@@ -182,7 +182,14 @@ def passes(variant: str, first_name: str | None, p1: str, p2: str) -> bool:
     return True
 
 
+def _held() -> bool:
+    """HOLD_ANGLE_FILL=true: the three angle campaigns stop receiving leads (Emmanuel, 2026-10-21: the bank now feeds the OG-copy campaign 2157)."""
+    return os.getenv("HOLD_ANGLE_FILL", "").strip().lower() in ("1", "true", "yes")
+
+
 def needed() -> bool:
+    if _held():
+        return False
     s = _setup()
     if not s:
         return False
@@ -435,6 +442,8 @@ def fill(post: bool = True) -> dict:
     from .stages.s4_people import score_title
     from .clients.quickenrich import Contact
 
+    if _held():
+        return {"status": "held"}
     s = _setup()
     if not s:
         return {"status": "no_test"}

@@ -241,3 +241,61 @@ def test_sends_and_replies_come_from_emailbison_counters(monkeypatch):
     rows = {"A5": {"leads": 10, "replied": 0, "interested": 0, "booked": 1, "positive": 1}}
     testgrid._attach_sends(rows, {})
     assert rows["A5"] == {"leads": 10, "replied": 8, "interested": 2, "booked": 1, "positive": 3, "sent": 665}
+
+
+def test_materials_standards_match_the_locked_field_rules():
+    from app import materials as m
+    assert m.check_materials("steel coils and structural beams") == []
+    assert "6 words (max 5)" in m.check_materials("steel coils and structural beams today")[0] or m.check_materials("steel coils and structural beams today")
+    assert any("lowercase" in x for x in m.check_materials("Steel coils and bars"))
+    assert any("both sides vague" in x for x in m.check_materials("freight and goods"))
+    assert any("dangling modifier" in x for x in m.check_materials("liquid chemicals and dry"))
+    assert any("repeated" in x for x in m.check_materials("pallets and pallets"))
+    assert any("generic fallback" in x for x in m.check_materials("palletized freight and general goods"))
+    assert m.check_materials("lumber") and m.check_materials("")
+    assert m.check_company("Oklahoma Tank Lines United Petroleum Transports") and m.check_company("Acme Inc")
+    assert m.check_company("Steel Dynamics") == []
+
+
+def test_company_name_is_cleaned_with_the_latest_cleaner_and_passes_the_standard():
+    from app import materials as m
+    from app.company_name_cleaner import clean_company_name
+    for raw in ["ALG Worldwide Logistics Inc", "Oklahoma Tank Lines United Petroleum Transports", "KWS Manufacturing Company, LLC",
+                "Schnellecke Logistics AG & Co. KG", "OnlineMetals.com", "General Stamping & Metalworks, Inc."]:
+        assert m.check_company(clean_company_name(raw)) == [], (raw, clean_company_name(raw))
+
+
+def test_materials_reply_is_cleaned_and_unclear_means_held(monkeypatch):
+    from app import materials as m
+    from app.clients import llm
+    replies = iter(['"Steel Coils and Structural Beams."', "unclear"])
+    monkeypatch.setattr(llm, "complete", lambda *a, **k: next(replies))
+    assert m.infer("Acme Steel", "makes steel coils", "Steel") == "steel coils and structural beams"
+    assert m.infer("Mystery Co", "", "") is None
+
+
+def test_infer_retries_once_when_the_first_answer_breaks_the_standard(monkeypatch):
+    from app import materials as m
+    from app.clients import llm
+    replies = iter(["freight and goods", "roofing shingles and underlayment"])
+    monkeypatch.setattr(llm, "complete", lambda *a, **k: next(replies))
+    assert m.infer("Roof Co", "roofing", "Building Materials") == "roofing shingles and underlayment"
+
+
+def test_lead_payload_carries_materials_hauled_for_the_og_copy_campaign():
+    from app.clients import emailbison
+    lead = emailbison._lead_payload({"email": "a@x.com", "first_name": "A", "company_name": "ALG Worldwide Logistics Inc", "company_domain": "x.com",
+                                     "materials_hauled": "steel coils and bars"})
+    assert lead["custom_fields"]["MATERIALS_HAULED"] == "steel coils and bars" and lead["custom_fields"]["COMPANY"]
+    plain = emailbison._lead_payload({"email": "b@x.com", "first_name": "B", "company_name": "Acme", "company_domain": "x.com"})
+    assert "MATERIALS_HAULED" not in plain["custom_fields"]
+
+
+def test_angle_fill_can_be_held_and_the_og_campaign_mode_is_off_by_default(monkeypatch):
+    from app import materials_fill, wave1_fill
+    monkeypatch.setenv("HOLD_ANGLE_FILL", "true")
+    assert wave1_fill.needed() is False and wave1_fill.fill() == {"status": "held"}
+    monkeypatch.delenv("MATERIALS_CAMPAIGN_ID", raising=False)
+    assert materials_fill.campaign_id() is None and materials_fill.run_pass() == {"status": "not_enabled"}
+    monkeypatch.setenv("MATERIALS_CAMPAIGN_ID", "2157")
+    assert materials_fill.campaign_id() == 2157 and materials_fill.target() == 3500
