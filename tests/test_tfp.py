@@ -417,18 +417,6 @@ def test_backfill_keeps_valid_values_fixes_filler_and_lists_what_it_cannot_descr
     assert by["e@acme.com"]["company"] != "ACME Industries Inc." and {"name": "materials_hauled", "value": "pallets and crates"} in by["e@acme.com"]["custom_variables"]
 
 
-def test_weak_phrases_get_one_specific_retry_but_only_the_standard_can_reject(monkeypatch):
-    from app import materials as m
-    from app.clients import llm
-    assert m.weak("containers and cargo") and m.weak("metal parts and components") and m.weak("forklifts and equipment")
-    assert not m.weak("fuel injectors and gaskets") and not m.weak("steel coils and structural beams")
-    replies = iter(["metal parts and components", "fuel injectors and gaskets"])
-    monkeypatch.setattr(llm, "complete", lambda *a, **k: next(replies))
-    assert m.infer("Acme", "makes engine parts", "Auto") == "fuel injectors and gaskets"
-    replies = iter(["containers and cargo", "pallets and cargo"])                       # the retry is no better: keep the first, it passes the standard
-    monkeypatch.setattr(llm, "complete", lambda *a, **k: next(replies))
-    assert m.infer("Port Co", "container terminal", "Ports") == "containers and cargo"
-
 
 def test_parallel_chunks_never_search_the_same_company_twice(monkeypatch):
     from app import scaling, testrun

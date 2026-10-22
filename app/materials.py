@@ -87,17 +87,6 @@ def check_materials(v: str | None) -> list[str]:
     return out
 
 
-SPECIFIC = (" Do not use a vague word alone as one side: not 'equipment', 'parts', 'components', 'cargo', 'freight', 'goods', 'materials', 'products', "
-            "'supplies' or 'machinery' by themselves. Name the specific things, e.g. 'fuel injectors and gaskets', not 'automotive parts and components'.")
-
-
-def weak(v: str) -> bool:
-    """Passes the locked standard but reads like filler: a side that is only a vague word ('containers and cargo', 'metal parts and components').
-    The standard bans both sides being vague; this catches one."""
-    sides = (v or "").split(" and ")
-    return any(len(sd.split()) == 1 and sd.strip() in VAGUE for sd in sides) or any(sd.strip().split()[-1:] and sd.strip().split()[-1] in {"components", "equipment"} for sd in sides)
-
-
 def _clean(raw: str) -> str:
     """The model's reply as a candidate phrase: first line, lowercase, no quotes or trailing punctuation, cut to 5 words."""
     first = (raw or "").strip().splitlines()[0] if (raw or "").strip() else ""
@@ -107,30 +96,17 @@ def _clean(raw: str) -> str:
 
 
 def infer(name: str, description: str, industry: str, attempts: int = 2) -> str | None:
-    """MATERIALS_HAULED for one company, or None when the model cannot say or the tries all fail the standards.
-
-    A phrase that passes the standard but is weak (see weak()) gets one more try with an instruction to name specific things; the better of the two is kept,
-    and a weak phrase that passes the standard is still used when the retry is no better, so the standard stays the only thing that can reject a company."""
+    """MATERIALS_HAULED for one company, or None when the model cannot say or two tries both fail the standards."""
     from .clients import llm
     user = f"Company: {name}\nDescription: {(description or '')[:600]}\nIndustry: {industry or 'unknown'}"
-
-    def ask(system: str) -> str:
-        try:
-            return _clean(llm.complete(MODEL, system, user, TEMPERATURE, max_tokens=60, provider="openrouter"))
-        except llm.LLMUnavailable:
-            return _clean(llm.complete(MODEL, system, user, TEMPERATURE, max_tokens=60, provider="buzzlead"))
-
-    first: str | None = None
     for _ in range(attempts):
-        cand = ask(SYSTEM)
+        try:
+            text = llm.complete(MODEL, SYSTEM, user, TEMPERATURE, max_tokens=60, provider="openrouter")
+        except llm.LLMUnavailable:
+            text = llm.complete(MODEL, SYSTEM, user, TEMPERATURE, max_tokens=60, provider="buzzlead")
+        cand = _clean(text)
         if cand == UNCLEAR or not cand:
             return None
         if not check_materials(cand):
-            first = cand
-            break
-    if first is None:
-        return None
-    if not weak(first):
-        return first
-    retry = ask(SYSTEM + SPECIFIC)
-    return retry if retry and retry != UNCLEAR and not check_materials(retry) and not weak(retry) else first
+            return cand
+    return None
