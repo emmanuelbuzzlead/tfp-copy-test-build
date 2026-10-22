@@ -54,7 +54,13 @@ def numbers() -> dict:
     with_contacts = _n("SELECT count(DISTINCT company_domain) FROM contacts WHERE company_domain IN (SELECT domain FROM staged_companies)")
     contact_rows = _n("SELECT count(*) FROM contacts WHERE company_domain IN (SELECT domain FROM staged_companies)")
     fit_failed = _n("""SELECT count(*) FROM staged_companies s JOIN company_funnel f ON f.domain = s.domain WHERE f.fit IN ('LOW','NOT_FIT')""")
-    left = max(sourced - searched, 0)
+    # Companies the contact search can really pick up: tiered as never contacted, fit not rejected, in a declared vertical. sourced - searched also counted
+    # companies with no tier row (10,792 of 14,881 on 2026-10-22), which made the pool look four times bigger than it was.
+    left = _n("""SELECT count(DISTINCT s.domain) FROM staged_companies s JOIN company_funnel f ON f.domain = s.domain
+                 WHERE s.verdict = 'KEEP' AND s.vertical = ANY(%s) AND s.found_at IS NULL AND s.consumed_at IS NULL AND f.tier = 1
+                   AND NOT coalesce(f.replied, false) AND coalesce(f.fit, '') NOT IN ('LOW', 'NOT_FIT')""", (list(client.profile().verticals),))
+    untiered = _n("""SELECT count(*) FROM staged_companies s WHERE s.verdict = 'KEEP' AND s.found_at IS NULL
+                     AND NOT EXISTS (SELECT 1 FROM company_funnel f WHERE f.domain = s.domain)""")
     cps = contact_rows / searched if searched else 0.5            # contacts per searched company, measured
     pool_contacts = bank + left * cps
     potential = loaded + pool_contacts * ASSUMED_COPY_PASS
@@ -64,7 +70,7 @@ def numbers() -> dict:
     except Exception:
         og = None
     return dict(og=og, goal=goal, target=t["target"], loaded=loaded, loaded_by=loaded_by, per_hour=per_hour, bank=bank, held=held, sourced=sourced,
-                searched=searched, left=left, with_contacts=with_contacts, contact_rows=contact_rows, fit_failed=fit_failed, cps=cps,
+                searched=searched, left=left, untiered=untiered, with_contacts=with_contacts, contact_rows=contact_rows, fit_failed=fit_failed, cps=cps,
                 potential=potential)
 
 

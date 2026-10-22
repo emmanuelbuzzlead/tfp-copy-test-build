@@ -121,6 +121,13 @@ def _source_round(prof, st: dict, n: int) -> int:
         if i % 6 == 0:
             _say(f"  sourcing {i}/{len(prof.verticals)} verticals, {_staged() - before} new companies so far.")
     _set(st, source_round=rnd)
+    # Every run_source call tiers new companies, but funnel.refresh skips itself inside a five-minute window, so companies staged late in a round never got a
+    # tier row and the contact search could not see them: 10,792 of 14,881 stored companies on 2026-10-22. One forced pass closes the round.
+    try:
+        from . import funnel
+        funnel.refresh(force=True)
+    except Exception as exc:
+        _say(f"tiering the new companies failed: {str(exc)[:140]}; they will not be searchable until it runs.")
     added = _staged() - before
     _say(f"sourcing round {rnd} done: {added} new companies staged.")
     return added

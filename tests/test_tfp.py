@@ -432,3 +432,12 @@ def test_parallel_chunks_never_search_the_same_company_twice(monkeypatch):
     testrun._claim(Prof, 10)
     assert testrun._claim_peek(Prof) is False
     testrun._claimed.clear()
+
+
+def test_a_sourcing_round_ends_with_a_forced_tier_pass_and_the_page_counts_searchable_companies():
+    import inspect
+    from app import runway, testrun
+    src = inspect.getsource(testrun._source_round)
+    assert "funnel.refresh(force=True)" in src and src.index("funnel.refresh(force=True)") > src.index("source_round=rnd")
+    rsrc = inspect.getsource(runway.numbers)
+    assert "f.tier = 1" in rsrc and "untiered" in rsrc          # the pool is companies the search can pick, not stored minus searched

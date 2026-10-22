@@ -136,6 +136,8 @@ def page_html() -> str:
     recs = [recommendation(n),
             "The next sourcing rounds should lean on the best-yield verticals in the table below and shrink the weak ones.",
             "Nothing sends from here: the campaigns are drafts with no senders attached."]
+    if n.get("untiered", 0) > 500:
+        recs.insert(1, f"{n['untiered']:,} stored companies have not been tiered yet, so the contact search cannot see them. The tiering pass runs at the end of each sourcing round.")
     recs_html = "".join(f"<li>{escape(x)}</li>" for x in recs)
     now = datetime.now(timezone.utc).strftime("%b %d, %H:%M UTC")
     og = n.get("og")
@@ -158,7 +160,7 @@ def page_html() -> str:
     cards = "".join([
         _card(f"{loaded:,}", "Leads loaded", "in the three draft campaigns"),
         _card(f"{n['bank']:,}", "Contacts ready for copy", "verified, at companies that passed the fit check"),
-        _card(f"{n['left']:,}", "Companies not searched yet", f"{_pct(n['left'], n['sourced'])}% of the {n['sourced']:,} found"),
+        _card(f"{n['left']:,}", "Companies ready to search", f"never emailed, passed fit, in a declared vertical; {n['sourced']:,} found in all"),
         _card(f"{n['per_hour']:,}", "Leads an hour", "loaded in the last 60 minutes"),
     ])
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
