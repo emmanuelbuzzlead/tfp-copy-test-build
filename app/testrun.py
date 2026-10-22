@@ -126,21 +126,51 @@ def _source_round(prof, st: dict, n: int) -> int:
     return added
 
 
-def _one_chunk(prof, st: dict, run_id: str) -> int:
-    """Search up to 200 staged companies for contacts. Fit-before-verify runs inside stage 4. Returns how many companies were searched (0 = none left)."""
+_claimed: set[str] = set()
+_claim_lock = threading.Lock()
+
+
+def _claim(prof, n: int) -> list[dict]:
+    """Companies for one chunk. A company is only marked searched when its chunk finishes, so several chunks running side by side would pick the same
+    ones and pay twice; claimed domains are kept here until their chunk is done."""
+    from . import scaling
+    with _claim_lock:
+        picked = scaling.pick_companies(list(prof.verticals), n + len(_claimed))
+        fresh = [c for c in picked if c["domain"] not in _claimed][:n]
+        _claimed.update(c["domain"] for c in fresh)
+    return fresh
+
+
+def _claim_peek(prof) -> bool:
+    """True when at least one unclaimed company is waiting to be searched."""
+    from . import scaling
+    with _claim_lock:
+        return any(c["domain"] not in _claimed for c in scaling.pick_companies(list(prof.verticals), 1 + len(_claimed)))
+
+
+def _one_chunk(prof, st: dict, run_id: str, n: int = 200) -> int:
+    """Search up to n staged companies for contacts. Fit-before-verify runs inside stage 4. Returns how many companies were searched (0 = none left)."""
     from . import company_fit, scaling
-    companies = scaling.pick_companies(list(prof.verticals), 200)
+    companies = _claim(prof, n)
     if not companies:
         return 0
-    people = scaling.source_contacts(companies, run_id)
-    found = {(p.get("company_domain") or p.get("domain")) for p in people}
-    with_contacts = [c for c in companies if c["domain"] in found]
-    verdicts = company_fit.check([{"domain": c["domain"], "name": c.get("name") or ""} for c in with_contacts], workers=12) if with_contacts else {}
-    passing = [c for c in with_contacts if (verdicts.get(c["domain"]) or {}).get("fit") in company_fit.PASS]
+    try:
+        people = scaling.source_contacts(companies, run_id)
+        found = {(p.get("company_domain") or p.get("domain")) for p in people}
+        with_contacts = [c for c in companies if c["domain"] in found]
+        verdicts = company_fit.check([{"domain": c["domain"], "name": c.get("name") or ""} for c in with_contacts], workers=12) if with_contacts else {}
+        passing = [c for c in with_contacts if (verdicts.get(c["domain"]) or {}).get("fit") in company_fit.PASS]
+    finally:
+        with _claim_lock:
+            _claimed.difference_update(c["domain"] for c in companies)
     _bump(st, searched=len(companies), with_contacts=len(with_contacts), fit_passed=len(passing), chunks=1)
     _save(st)
-    _say(f"contacts: {len(companies)} companies searched, {len(with_contacts)} had contacts that passed the fit check (judged before verification); "
-         f"{_bank()} usable contacts in the bank.")
+    line = (f"contacts: {len(companies)} companies searched, {len(with_contacts)} had contacts that passed the fit check (judged before verification); "
+            f"{_bank()} usable contacts in the bank.")
+    if st.get("chunks", 0) % 4 == 0:
+        _say(line)              # several chunks run at once now: Slack gets every fourth, the log gets all
+    else:
+        print(f"[testrun] {line}", flush=True)
     return len(companies)
 
 
@@ -181,33 +211,47 @@ def run() -> dict:
             _say(f"{prof.display_name} scale-up started: goal {target_total} leads across the draft campaigns, {_loaded()} loaded so far, {_bank()} usable contacts banked. "
                  f"Contact finding and copy now run side by side.")
 
+        # Emmanuel, 2026-10-22: "we can search more companies faster... send more companies through." One chunk of 200 took about 18 minutes, so contact
+        # finding was the slow side. SCALE_PRODUCER_THREADS chunks of SCALE_CHUNK companies now run side by side (defaults 4 x 250).
+        threads_n = max(int(os.getenv("SCALE_PRODUCER_THREADS", "4")), 1)
+        chunk_n = int(os.getenv("SCALE_CHUNK", "250"))
+        src_lock = threading.Lock()
+        shared = {"stalls": 0, "alive": threads_n}
+
         def producer() -> None:
-            stalls = 0
             try:
                 while not stop.is_set() and time.time() < deadline and loaded_now() < target_now():
                     if _bank() >= bank_cap:
                         time.sleep(20)
                         continue
-                    if _one_chunk(prof, st, run_id) > 0:
+                    if _one_chunk(prof, st, run_id, chunk_n) > 0:
                         continue
-                    # no companies left to search: source another, bigger round
-                    rnd = st.get("source_round", 1)
-                    n = source_n * (2 ** max(rnd - 1, 0)) if rnd > 1 else source_n
-                    added = _source_round(prof, st, n)
-                    if added < 150:
-                        stalls += 1
-                        if stalls >= 2:
-                            _say(f"supply is running out: the last sourcing rounds added only {added} companies.")
-                            break
-                    else:
-                        stalls = 0
+                    # no companies left to search: one worker at a time sources another, bigger round
+                    with src_lock:
+                        if _claim_peek(prof):
+                            continue                       # another worker sourced while this one waited
+                        rnd = st.get("source_round", 1)
+                        n = source_n * (2 ** max(rnd - 1, 0)) if rnd > 1 else source_n
+                        added = _source_round(prof, st, n)
+                        if added < 150:
+                            shared["stalls"] += 1
+                            if shared["stalls"] >= 2:
+                                _say(f"supply is running out: the last sourcing rounds added only {added} companies.")
+                                break
+                        else:
+                            shared["stalls"] = 0
             except Exception as exc:
-                _say(f"contact finding stopped on an error: {str(exc)[:160]}. Copy keeps working through the bank.")
+                _say(f"contact finding stopped on an error: {str(exc)[:160]}. Loading keeps working through the bank.")
             finally:
-                flags["supply_done"] = True
+                with src_lock:
+                    shared["alive"] -= 1
+                    if shared["alive"] <= 0:
+                        flags["supply_done"] = True
 
-        t = threading.Thread(target=producer, daemon=True)
-        t.start()
+        workers = [threading.Thread(target=producer, daemon=True) for _ in range(threads_n)]
+        for w in workers:
+            w.start()
+        t = workers[0]
 
         low_cycles = 0
         while time.time() < deadline:
@@ -247,7 +291,8 @@ def run() -> dict:
             else:
                 time.sleep(30)
         stop.set()
-        t.join(timeout=120)
+        for w in workers:
+            w.join(timeout=60)
         target_total = target_now()
         final = loaded_now()
         _set(st, **{done_key: final >= target_total, "final_loaded": final})

@@ -428,3 +428,19 @@ def test_weak_phrases_get_one_specific_retry_but_only_the_standard_can_reject(mo
     replies = iter(["containers and cargo", "pallets and cargo"])                       # the retry is no better: keep the first, it passes the standard
     monkeypatch.setattr(llm, "complete", lambda *a, **k: next(replies))
     assert m.infer("Port Co", "container terminal", "Ports") == "containers and cargo"
+
+
+def test_parallel_chunks_never_search_the_same_company_twice(monkeypatch):
+    from app import scaling, testrun
+    class Prof: verticals = ("V",)
+    pool = [{"domain": f"c{i}.com", "name": f"C{i}"} for i in range(10)]
+    monkeypatch.setattr(scaling, "pick_companies", lambda verts, n: pool[:n])
+    testrun._claimed.clear()
+    first = testrun._claim(Prof, 4)
+    second = testrun._claim(Prof, 4)
+    assert [c["domain"] for c in first] == ["c0.com", "c1.com", "c2.com", "c3.com"]
+    assert [c["domain"] for c in second] == ["c4.com", "c5.com", "c6.com", "c7.com"]
+    assert testrun._claim_peek(Prof) is True
+    testrun._claim(Prof, 10)
+    assert testrun._claim_peek(Prof) is False
+    testrun._claimed.clear()
