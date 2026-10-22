@@ -390,6 +390,8 @@ def test_backfill_keeps_valid_values_fixes_filler_and_lists_what_it_cannot_descr
          "custom_variables": [{"name": "company", "value": "Roofco"}, {"name": "materials_hauled", "value": "general freight and palletized goods"}]},
         {"id": 3, "email": "c@mystery.com", "first_name": "C", "last_name": "D", "title": "EHS Manager", "company": "Mystery Corp",
          "custom_variables": [{"name": "company", "value": "Mystery Corp"}]},
+        {"id": 5, "email": "e@acme.com", "first_name": "E", "last_name": "F", "title": "Manager", "company": "ACME Industries Inc.",
+         "custom_variables": [{"name": "company", "value": "ACME Industries Inc."}, {"name": "materials_hauled", "value": "pallets and crates"}]},
         {"id": 4, "email": "d@gmail.com", "first_name": "D", "last_name": "E", "title": "Manager", "company": "Dee Inc", "custom_variables": []},
     ]
     sent = []
@@ -407,8 +409,9 @@ def test_backfill_keeps_valid_values_fixes_filler_and_lists_what_it_cannot_descr
     monkeypatch.setattr(emailbison, "_send_retry", lambda method, path, body=None: sent.append(body))
     monkeypatch.setattr(materials_fill, "phrases", lambda rows: ({"roofco.com": "roofing shingles and underlayment", "mystery.com": None}, {}))
     dry = b.run(2174, apply=False)
-    assert (dry["leads"], dry["already_valid"], dry["to_fix"], dry["resolved"], dry["unresolved"], dry["applied"]) == (4, 1, 3, 1, 2, False) and not sent
+    assert (dry["leads"], dry["already_valid"], dry["to_fix"], dry["company_recleaned"], dry["resolved"], dry["unresolved"], dry["applied"]) == (5, 2, 3, 1, 2, 2, False) and not sent
     done = b.run(2174, apply=True)
     assert done["applied"] and len(sent) == 1 and sent[0]["existing_lead_behavior"] == "patch"
-    only = sent[0]["leads"][0]
-    assert only["email"] == "b@roofco.com" and {"name": "materials_hauled", "value": "roofing shingles and underlayment"} in only["custom_variables"]
+    by = {l["email"]: l for l in sent[0]["leads"]}
+    assert {"name": "materials_hauled", "value": "roofing shingles and underlayment"} in by["b@roofco.com"]["custom_variables"]
+    assert by["e@acme.com"]["company"] != "ACME Industries Inc." and {"name": "materials_hauled", "value": "pallets and crates"} in by["e@acme.com"]["custom_variables"]

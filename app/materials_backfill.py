@@ -41,6 +41,8 @@ def audit(cid: int) -> dict:
             c["materials_ok"] += 1
         if materials.check_company(comp):
             c["company_fails_standard"] += 1
+        if comp and comp != clean_company_name(comp):
+            c["company_not_cleaned"] += 1
     return dict(c)
 
 
@@ -54,11 +56,17 @@ def run(cid: int, apply: bool = False) -> dict:
     materials_fill.ensure_tables()
     _ensure_unresolved()
     leads = emailbison._paged(f"/api/campaigns/{cid}/leads", None, cap=400)
-    todo, kept = [], 0
+    todo, kept, recompany = [], 0, []
     for lead in leads:
-        m = _vars(lead).get("materials_hauled", "")
+        v = _vars(lead)
+        m = v.get("materials_hauled", "")
         if m and not materials.check_materials(m):
             kept += 1
+            comp = v.get("company") or lead.get("company") or ""
+            cleaned = clean_company_name(comp) if comp else ""
+            if cleaned and cleaned != comp and not materials.check_company(cleaned):
+                recompany.append({"email": lead["email"], "first_name": lead.get("first_name") or "", "last_name": lead.get("last_name") or "",
+                                  "company": cleaned, "title": lead.get("title") or "", "materials": m})       # value is fine, the name is not clean yet
         else:
             todo.append(lead)
     rows = [{"company_domain": _domain(x), "company_name": _vars(x).get("company") or x.get("company") or "", "email": x["email"]}
@@ -75,7 +83,9 @@ def run(cid: int, apply: bool = False) -> dict:
             continue
         resolved.append({"email": lead["email"], "first_name": lead.get("first_name") or "", "last_name": lead.get("last_name") or "",
                          "company": company, "title": lead.get("title") or "", "materials": p})
-    report = {"campaign": cid, "leads": len(leads), "already_valid": kept, "to_fix": len(todo), "resolved": len(resolved), "unresolved": len(unresolved),
+    resolved += recompany
+    report = {"campaign": cid, "leads": len(leads), "already_valid": kept, "to_fix": len(todo), "company_recleaned": len(recompany), "resolved": len(resolved),
+              "unresolved": len(unresolved),
               "applied": False, "stats": stats, "samples": [(r["company"], r["materials"]) for r in resolved[:8]]}
     if unresolved:
         with db.cursor() as cur:
