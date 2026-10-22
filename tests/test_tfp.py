@@ -378,3 +378,37 @@ def test_scale_buttons_are_routed_to_the_review_approval():
     kind, command, user = web.interaction_to_command({"type": "block_actions", "user": {"username": "e"},
                                                        "actions": [{"action_id": "scale_review_5000", "value": "angle:A5|5000"}]})
     assert kind == "scale_review" and command == "angle:A5|5000"
+
+
+def test_backfill_keeps_valid_values_fixes_filler_and_lists_what_it_cannot_describe(monkeypatch):
+    from app import db, materials_backfill as b, materials_fill
+    from app.clients import emailbison
+    leads = [
+        {"id": 1, "email": "a@steelco.com", "first_name": "A", "last_name": "B", "title": "Safety Manager", "company": "Steelco",
+         "custom_variables": [{"name": "company", "value": "Steelco"}, {"name": "materials_hauled", "value": "steel coils and bars"}]},
+        {"id": 2, "email": "b@roofco.com", "first_name": "B", "last_name": "C", "title": "Plant Manager", "company": "Roofco",
+         "custom_variables": [{"name": "company", "value": "Roofco"}, {"name": "materials_hauled", "value": "general freight and palletized goods"}]},
+        {"id": 3, "email": "c@mystery.com", "first_name": "C", "last_name": "D", "title": "EHS Manager", "company": "Mystery Corp",
+         "custom_variables": [{"name": "company", "value": "Mystery Corp"}]},
+        {"id": 4, "email": "d@gmail.com", "first_name": "D", "last_name": "E", "title": "Manager", "company": "Dee Inc", "custom_variables": []},
+    ]
+    sent = []
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, *a, **k): pass
+        def executemany(self, *a, **k): pass
+        def fetchone(self): return None
+    monkeypatch.setattr(db, "cursor", lambda: Cur())
+    monkeypatch.setattr(materials_fill, "ensure_tables", lambda: None)
+    monkeypatch.setattr(b, "_ensure_unresolved", lambda: None)
+    monkeypatch.setattr(emailbison, "_paged", lambda path, params=None, cap=400: leads)
+    monkeypatch.setattr(emailbison, "ensure_custom_variables", lambda names: None)
+    monkeypatch.setattr(emailbison, "_send_retry", lambda method, path, body=None: sent.append(body))
+    monkeypatch.setattr(materials_fill, "phrases", lambda rows: ({"roofco.com": "roofing shingles and underlayment", "mystery.com": None}, {}))
+    dry = b.run(2174, apply=False)
+    assert (dry["leads"], dry["already_valid"], dry["to_fix"], dry["resolved"], dry["unresolved"], dry["applied"]) == (4, 1, 3, 1, 2, False) and not sent
+    done = b.run(2174, apply=True)
+    assert done["applied"] and len(sent) == 1 and sent[0]["existing_lead_behavior"] == "patch"
+    only = sent[0]["leads"][0]
+    assert only["email"] == "b@roofco.com" and {"name": "materials_hauled", "value": "roofing shingles and underlayment"} in only["custom_variables"]
