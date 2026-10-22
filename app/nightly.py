@@ -57,6 +57,12 @@ def run_once() -> dict:
     except Exception as exc:
         db.log(None, "nightly", f"derived-angle check failed: {exc}", level="warn")
     try:
+        from . import scale_review
+        scale_review.discover_fill_campaigns()
+        out["scale_reviews"] = scale_review.check_due()
+    except Exception as exc:
+        db.log(None, "nightly", f"scale review failed: {exc}", level="warn")
+    try:
         slack.post(status_text(out))
     except Exception:
         pass

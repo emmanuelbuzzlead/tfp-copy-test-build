@@ -27,29 +27,116 @@ SHORT_DESCRIPTION = 40
 _lock = threading.Lock()
 
 
+def specs() -> list[dict]:
+    """The campaigns this fill loads, in order: [{"campaign": id, "target": n, "materials": bool}].
+
+    MATERIALS_CAMPAIGNS="2174:2100:company,2190:1500:materials" (campaign:target:company|materials), or the older single-campaign trio
+    MATERIALS_CAMPAIGN_ID / MATERIALS_TARGET / MATERIALS_NEEDED. A target raised by a Slack button is kept in fill_targets and wins when it is larger."""
+    out: list[dict] = []
+    raw = os.getenv("MATERIALS_CAMPAIGNS", "").strip()
+    if raw:
+        for part in raw.split(","):
+            bits = [b.strip() for b in part.split(":")]
+            if bits and bits[0].isdigit() and int(bits[0]) > 0:
+                out.append({"campaign": int(bits[0]), "target": int(bits[1]) if len(bits) > 1 and bits[1].isdigit() else 2000,
+                            "materials": (bits[2].lower() == "materials") if len(bits) > 2 else False})
+    else:
+        legacy = os.getenv("MATERIALS_CAMPAIGN_ID", "").strip()
+        if legacy.isdigit() and int(legacy) > 0:
+            out.append({"campaign": int(legacy), "target": int(os.getenv("MATERIALS_TARGET", "3500")), "materials": needs_materials()})
+    if out:
+        try:
+            ensure_tables()
+            with db.cursor() as cur:
+                cur.execute("SELECT campaign_id, target FROM fill_targets")
+                raised = {int(r["campaign_id"]): int(r["target"]) for r in cur.fetchall()}
+            for sp in out:
+                sp["target"] = max(sp["target"], raised.get(sp["campaign"], 0))
+        except Exception:
+            pass
+    return out
+
+
+def enabled() -> bool:
+    return bool(specs())
+
+
 def campaign_id() -> int | None:
-    raw = os.getenv("MATERIALS_CAMPAIGN_ID", "").strip()
-    return int(raw) if raw.isdigit() and int(raw) > 0 else None
+    """The first campaign (kept for callers that deal with one)."""
+    sp = specs()
+    return sp[0]["campaign"] if sp else None
 
 
-def target() -> int:
-    return int(os.getenv("MATERIALS_TARGET", "3500"))
+def target(cid: int | None = None) -> int:
+    sp = specs()
+    return sum(x["target"] for x in sp) if cid is None else next((x["target"] for x in sp if x["campaign"] == cid), 0)
+
+
+def needs_materials(cid: int | None = None) -> bool:
+    """False for a campaign whose copy has no {{MATERIALS_HAULED}} (2174, "Simple one liners"): that step is skipped and only COMPANY is set."""
+    if cid is not None:
+        for x in specs():
+            if x["campaign"] == cid:
+                return x["materials"]
+    return os.getenv("MATERIALS_NEEDED", "true").strip().lower() not in ("0", "false", "no")
+
+
+def raise_target(cid: int, new_target: int) -> None:
+    """A Slack button raised this campaign's goal. Stored in the database so it survives a redeploy."""
+    ensure_tables()
+    with db.cursor() as cur:
+        cur.execute("""INSERT INTO fill_targets (campaign_id, target) VALUES (%s, %s)
+                       ON CONFLICT (campaign_id) DO UPDATE SET target = GREATEST(fill_targets.target, EXCLUDED.target), updated_at = now()""", (cid, new_target))
+
+
+def all_done() -> bool:
+    sp = specs()
+    return bool(sp) and all(loaded(x["campaign"]) >= x["target"] for x in sp)
+
+
+def label() -> str:
+    return ", ".join(str(x["campaign"]) for x in specs())
 
 
 def ensure_tables() -> None:
     with db.cursor() as cur:
         cur.execute("ALTER TABLE contacts ADD COLUMN IF NOT EXISTS materials_hauled TEXT")
+        cur.execute("""CREATE TABLE IF NOT EXISTS fill_targets (campaign_id BIGINT PRIMARY KEY, target INTEGER NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())""")
         cur.execute("""CREATE TABLE IF NOT EXISTS materials_cache (
             domain TEXT PRIMARY KEY, phrase TEXT, status TEXT NOT NULL, model TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())""")
 
 
-def loaded() -> int:
-    cid = campaign_id()
-    if not cid:
-        return 0
+def loaded(cid: int | None = None) -> int:
+    """Leads in the campaign (all campaigns summed when cid is None). EmailBison's own total when it can be read, because a campaign may already hold
+    leads this service did not load (2174 had 602 from another source); else this database's count of what the fill pushed."""
+    if cid is None:
+        return sum(loaded(x["campaign"]) for x in specs())
+    try:
+        from .clients import emailbison
+        total = (emailbison.get_campaign(cid) or {}).get("total_leads")
+        if total is not None:
+            return int(total)
+    except Exception:
+        pass
     with db.cursor() as cur:
         cur.execute("SELECT count(*) n FROM contacts WHERE status = 'pushed' AND eb_campaign_id = %s", (cid,))
         return int(cur.fetchone()["n"])
+
+
+_existing_cache: dict = {}
+
+
+def existing_emails(cid: int, max_age: float = 600.0) -> set[str]:
+    """Emails already in the campaign (loaded by anyone), so the fill never counts or re-pushes them. Cached for ten minutes."""
+    import time
+    hit = _existing_cache.get(cid)
+    if hit and time.time() - hit["at"] < max_age:
+        return hit["emails"]
+    from .clients import emailbison
+    rows = emailbison._paged(f"/api/campaigns/{cid}/leads", None, cap=400)
+    emails = {(r.get("email") or "").lower() for r in rows if r.get("email")}
+    _existing_cache[cid] = {"at": time.time(), "emails": emails}
+    return emails
 
 
 def candidates() -> list[dict]:
@@ -146,68 +233,78 @@ def _hold(rows: list[dict], reason: str) -> None:
 
 
 def run_pass(batch: int | None = None) -> dict:
-    """One batch: gates, merge values, load. Safe to call repeatedly; returns counts for the scale-up job to report."""
-    from . import wave1_fill
-    cid = campaign_id()
-    if not cid:
+    """One batch for the first campaign that still has room. Safe to call repeatedly; returns counts for the scale-up job to report."""
+    sp = specs()
+    if not sp:
         return {"status": "not_enabled"}
     if not _lock.acquire(blocking=False):
         return {"status": "already_running"}
     try:
-        ensure_tables()
-        run_id = "materials-" + __import__("time").strftime("%Y%m%dT%H%M%S")
-        db.start_run(run_id)
-        room = target() - loaded()
-        if room <= 0:
-            db.finish_run(run_id, "complete", "target reached")
-            return {"status": "complete", "loaded": loaded(), "target": target()}
-        limit = min(batch or int(os.getenv("MATERIALS_BATCH", "300")), int(room * 1.15) + 5)
-        rows = candidates()[:limit]
-        pulled = len(rows)
-        rows = wave1_fill.fit_filter(rows, run_id)
-        rows = wave1_fill.mx_filter(rows, run_id)
-        phr, stats = phrases(rows)
-        keep: list[dict] = []
-        held = Counter()
-        unclear_rows, bad_rows = [], []
-        for r in rows:
-            p = phr.get(r["company_domain"])
-            if not p:
-                unclear_rows.append(r)
-                continue
-            company = clean_company_name(r.get("company_name") or r["company_domain"])
-            issues = materials.check_company(company) + materials.check_materials(p)
-            if issues:
-                bad_rows.append((r, "; ".join(issues)))
-                held[issues[0]] += 1
-                continue
-            keep.append({**r, "materials_hauled": p})
-        # Only rows the model could not describe are held for good; an API error is left in the bank for the next pass.
-        really_unclear = [r for r in unclear_rows if r["company_domain"] in _unclear_domains(unclear_rows)]
-        _hold(really_unclear, "MATERIALS_HAULED unclear: the model could not say what crosses this company's dock (held, never sent with filler)")
-        for r, why in bad_rows:
-            _hold([r], f"copy-field standard failed: {why}")
-        keep = keep[:max(room, 0)]
-        if keep:
-            with db.cursor() as cur:
-                cur.executemany("UPDATE contacts SET materials_hauled = %s WHERE email = %s", [(r["materials_hauled"], r["email"]) for r in keep])
-        sent = scaling.load_leads(cid, keep, run_id) if keep else []
-        total = loaded()
-        unclear_pct = 100.0 * stats["unclear"] / max(stats["companies"] - stats["cached"], 1) if stats["inferred"] + stats["unclear"] else 0.0
-        note = {"status": "complete" if total >= target() else "partial", "campaign": cid, "pulled": pulled, "loaded_now": len(sent), "loaded": total, "target": target(),
-                "held_unclear": len(really_unclear), "held_standard": len(bad_rows), "standard_reasons": dict(held), "unclear_pct": round(unclear_pct, 1),
-                "samples": [(clean_company_name(r.get("company_name") or r["company_domain"]), r["materials_hauled"]) for r in sent[:8]]}
-        if stats["inferred"] + stats["unclear"] >= 30 and unclear_pct > 10:
-            try:
-                from .clients import slack
-                slack.post(f":warning: Campaign {cid}: {unclear_pct:.0f}% of the companies in this batch could not be described for MATERIALS_HAULED "
-                           f"(standard: above 10% means the prompt or the fit is wrong). They were held, not sent.")
-            except Exception:
-                pass
-        db.finish_run(run_id, "complete", str({k: v for k, v in note.items() if k != "samples"})[:300])
-        return note
+        for x in sp:
+            if loaded(x["campaign"]) < x["target"]:
+                return _pass(x["campaign"], batch)
+        return {"status": "complete", "loaded": loaded(), "target": target()}
     finally:
         _lock.release()
+
+
+def _pass(cid: int, batch: int | None) -> dict:
+    """One batch into one campaign: gates, merge values, load."""
+    from . import wave1_fill
+    ensure_tables()
+    run_id = "materials-" + __import__("time").strftime("%Y%m%dT%H%M%S")
+    db.start_run(run_id)
+    room = target(cid) - loaded(cid)
+    if room <= 0:
+        db.finish_run(run_id, "complete", "target reached")
+        return {"status": "complete", "campaign": cid, "loaded": loaded(cid), "target": target(cid)}
+    limit = min(batch or int(os.getenv("MATERIALS_BATCH", "300")), int(room * 1.15) + 5)
+    have = existing_emails(cid)
+    rows = [r for r in candidates() if r["email"].lower() not in have][:limit]
+    pulled = len(rows)
+    rows = wave1_fill.fit_filter(rows, run_id)
+    rows = wave1_fill.mx_filter(rows, run_id)
+    need_mat = needs_materials(cid)
+    phr, stats = phrases(rows) if need_mat else ({}, {"companies": 0, "cached": 0, "inferred": 0, "unclear": 0, "errors": 0})
+    keep: list[dict] = []
+    held = Counter()
+    unclear_rows, bad_rows = [], []
+    for r in rows:
+        p = phr.get(r["company_domain"]) if need_mat else None
+        if need_mat and not p:
+            unclear_rows.append(r)
+            continue
+        company = clean_company_name(r.get("company_name") or r["company_domain"])
+        issues = materials.check_company(company) + (materials.check_materials(p) if need_mat else [])
+        if issues:
+            bad_rows.append((r, "; ".join(issues)))
+            held[issues[0]] += 1
+            continue
+        keep.append({**r, "materials_hauled": p} if need_mat else dict(r))
+    # Only rows the model could not describe are held for good; an API error is left in the bank for the next pass.
+    really_unclear = [r for r in unclear_rows if r["company_domain"] in _unclear_domains(unclear_rows)]
+    _hold(really_unclear, "MATERIALS_HAULED unclear: the model could not say what crosses this company's dock (held, never sent with filler)")
+    for r, why in bad_rows:
+        _hold([r], f"copy-field standard failed: {why}")
+    keep = keep[:max(room, 0)]
+    if keep and need_mat:
+        with db.cursor() as cur:
+            cur.executemany("UPDATE contacts SET materials_hauled = %s WHERE email = %s", [(r["materials_hauled"], r["email"]) for r in keep])
+    sent = scaling.load_leads(cid, keep, run_id) if keep else []
+    total = loaded(cid)
+    unclear_pct = 100.0 * stats["unclear"] / max(stats["companies"] - stats["cached"], 1) if stats["inferred"] + stats["unclear"] else 0.0
+    note = {"status": "complete" if total >= target(cid) else "partial", "campaign": cid, "pulled": pulled, "loaded_now": len(sent), "loaded": total, "target": target(cid),
+            "held_unclear": len(really_unclear), "held_standard": len(bad_rows), "standard_reasons": dict(held), "unclear_pct": round(unclear_pct, 1),
+            "samples": [(clean_company_name(r.get("company_name") or r["company_domain"]), r.get("materials_hauled") or "(company only)") for r in sent[:8]]}
+    if stats["inferred"] + stats["unclear"] >= 30 and unclear_pct > 10:
+        try:
+            from .clients import slack
+            slack.post(f":warning: Campaign {cid}: {unclear_pct:.0f}% of the companies in this batch could not be described for MATERIALS_HAULED "
+                       f"(standard: above 10% means the prompt or the fit is wrong). They were held, not sent.")
+        except Exception:
+            pass
+    db.finish_run(run_id, "complete", str({k: v for k, v in note.items() if k != "samples"})[:300])
+    return note
 
 
 def _unclear_domains(rows: list[dict]) -> set[str]:
@@ -218,23 +315,26 @@ def _unclear_domains(rows: list[dict]) -> set[str]:
         return {r["domain"] for r in cur.fetchall()}
 
 
-def status() -> dict | None:
-    """What the runway page and report show for the OG-copy campaign, or None when this mode is off."""
-    cid = campaign_id()
-    if not cid:
+def status() -> list[dict] | None:
+    """What the runway page and report show for each campaign this fill loads, or None when the mode is off."""
+    sp = specs()
+    if not sp:
         return None
-    with db.cursor() as cur:
-        cur.execute("""SELECT count(*) FILTER (WHERE status = 'pushed' AND eb_campaign_id = %s) loaded,
-                              count(*) FILTER (WHERE status = 'pushed' AND eb_campaign_id = %s AND updated_at > now() - interval '60 minutes') per_hour,
-                              count(*) FILTER (WHERE drop_reason LIKE 'MATERIALS_HAULED unclear%%') held_unclear,
-                              count(*) FILTER (WHERE drop_reason LIKE 'copy-field standard failed%%') held_standard
-                       FROM contacts""", (cid, cid))
-        row = dict(cur.fetchone())
-    live: dict = {}
-    try:
-        from .clients import emailbison
-        c = emailbison.get_campaign(cid) or {}
-        live = {"name": c.get("name"), "status": c.get("status"), "sent": int(c.get("emails_sent") or 0), "interested": int(c.get("interested") or 0)}
-    except Exception:
-        pass
-    return {"campaign": cid, "target": target(), **{k: int(v or 0) for k, v in row.items()}, **live}
+    out = []
+    for x in sp:
+        cid = x["campaign"]
+        with db.cursor() as cur:
+            cur.execute("""SELECT count(*) FILTER (WHERE status = 'pushed' AND eb_campaign_id = %s AND updated_at > now() - interval '60 minutes') per_hour,
+                                  count(*) FILTER (WHERE drop_reason LIKE 'MATERIALS_HAULED unclear%%') held_unclear,
+                                  count(*) FILTER (WHERE drop_reason LIKE 'copy-field standard failed%%') held_standard
+                           FROM contacts""", (cid,))
+            row = dict(cur.fetchone())
+        live: dict = {}
+        try:
+            from .clients import emailbison
+            c = emailbison.get_campaign(cid) or {}
+            live = {"name": c.get("name"), "status": c.get("status"), "sent": int(c.get("emails_sent") or 0), "interested": int(c.get("interested") or 0)}
+        except Exception:
+            pass
+        out.append({"campaign": cid, "target": x["target"], "loaded": loaded(cid), **{k: int(v or 0) for k, v in row.items()}, **live})
+    return out

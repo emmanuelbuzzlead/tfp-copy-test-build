@@ -299,3 +299,82 @@ def test_angle_fill_can_be_held_and_the_og_campaign_mode_is_off_by_default(monke
     assert materials_fill.campaign_id() is None and materials_fill.run_pass() == {"status": "not_enabled"}
     monkeypatch.setenv("MATERIALS_CAMPAIGN_ID", "2157")
     assert materials_fill.campaign_id() == 2157 and materials_fill.target() == 3500
+
+
+def test_runway_page_shows_the_og_campaign_as_one_more_row_against_its_goal(monkeypatch):
+    from app import runway_page
+    n = dict(goal=4500, target=1500, loaded=4500, loaded_by={"A5": 1500, "A7": 1500, "A10": 1500}, per_hour=0, bank=917, held=0, sourced=30581, searched=13138,
+             left=17443, with_contacts=3437, contact_rows=5000, fit_failed=3311, cps=0.4, potential=11444.0,
+             og=[{"campaign": 2157, "target": 3500, "loaded": 900, "per_hour": 300, "held_unclear": 12, "held_standard": 3, "name": "Single Site | 21st Oct (OG copy)", "sent": 0, "interested": 0}])
+    monkeypatch.setattr(runway_page, "numbers", lambda: n)
+    monkeypatch.setattr(runway_page, "_targets", lambda: {"target": 1500, "angles": {"A5": 2103, "A7": 2106, "A10": 2107}})
+    monkeypatch.setattr(runway_page, "held_reasons", lambda: [])
+    monkeypatch.setattr(runway_page, "_vertical_rows", lambda: [])
+    html = runway_page.page_html()
+    assert "900 of 3,500" in html and "campaign 2157" in html and html.count("Leads by campaign") == 1
+    assert "900 of 3,500 leads loaded across 1 fill campaign (26%)" in html
+
+
+def test_company_only_mode_and_the_campaign_total_counts_leads_loaded_by_others(monkeypatch):
+    from app import materials_fill
+    from app.clients import emailbison
+    monkeypatch.setenv("MATERIALS_CAMPAIGN_ID", "2174")
+    monkeypatch.setenv("MATERIALS_NEEDED", "false")
+    assert materials_fill.needs_materials() is False
+    monkeypatch.setattr(emailbison, "get_campaign", lambda cid: {"total_leads": 602})
+    assert materials_fill.loaded() == 602                        # 602 came from another source and still count toward the 2,000
+    monkeypatch.setenv("MATERIALS_NEEDED", "true")
+    assert materials_fill.needs_materials() is True
+
+
+def test_leads_already_in_the_campaign_are_never_pushed_again(monkeypatch):
+    from app import materials_fill
+    from app.clients import emailbison
+    materials_fill._existing_cache.clear()
+    monkeypatch.setattr(emailbison, "_paged", lambda path, params=None, cap=400: [{"email": "A@X.com"}, {"email": "b@y.com"}])
+    assert materials_fill.existing_emails(2174) == {"a@x.com", "b@y.com"}
+
+
+def test_several_campaigns_can_be_filled_and_a_raised_goal_wins(monkeypatch):
+    from app import materials_fill, db
+    monkeypatch.setenv("MATERIALS_CAMPAIGNS", "2174:2100:company, 2190:1500:materials")
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, *a, **k): pass
+        def fetchall(self): return [{"campaign_id": 2174, "target": 5000}]
+    monkeypatch.setattr(db, "cursor", lambda: Cur())
+    sp = materials_fill.specs()
+    assert [(x["campaign"], x["target"], x["materials"]) for x in sp] == [(2174, 5000, False), (2190, 1500, True)]
+    assert materials_fill.target() == 6500 and materials_fill.target(2190) == 1500 and materials_fill.label() == "2174, 2190"
+
+
+def test_scale_review_bar_needs_volume_and_real_interest():
+    from app import scale_review
+    g = dict(scale_review.DEFAULTS)
+    ok, why = scale_review.judge({"sent": 900, "interested": 5}, g)
+    assert not ok and "1,500" in why
+    ok, why = scale_review.judge({"sent": 2000, "interested": 2}, g)
+    assert not ok and "bar is 3" in why
+    ok, why = scale_review.judge({"sent": 4000, "interested": 3}, g)
+    assert not ok and "0.75" in why
+    ok, why = scale_review.judge({"sent": 2500, "interested": 4}, g)
+    assert ok and "1.60 per 1,000" in why
+
+
+def test_tfp_winner_scales_to_3500_first_and_asks_before_going_further():
+    from app import scale_review, testgrid
+    cfg = testgrid.load_config()
+    gate = cfg["scale_gate"]
+    assert gate["stage1_target"] == 3500 and gate["review_after_days"] == 5 and gate["next_targets"] == [5000, 10000]
+    assert scale_review.gate()["min_sends"] == gate["min_sends"]
+    import inspect
+    src = inspect.getsource(testgrid._evaluate_and_record_locked)
+    assert "stage1" in src and "scale_review.schedule" in src
+
+
+def test_scale_buttons_are_routed_to_the_review_approval():
+    from app import web
+    kind, command, user = web.interaction_to_command({"type": "block_actions", "user": {"username": "e"},
+                                                       "actions": [{"action_id": "scale_review_5000", "value": "angle:A5|5000"}]})
+    assert kind == "scale_review" and command == "angle:A5|5000"

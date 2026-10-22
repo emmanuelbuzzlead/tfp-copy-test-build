@@ -130,7 +130,7 @@ def _require_upload_token(authorization: str | None) -> None:
 _LAZY_IMPORTS = [
     "app.testgrid", "app.company_fit", "app.cost_tests", "app.scaling",
     "app.wave1_fill", "app.clients.leadocean", "app.modes", "app.report",
-    "app.taxonomy", "app.stages.s7_push", "app.stages.s8_review", "app.runner", "app.nightly", "app.angle_derivation",
+    "app.taxonomy", "app.stages.s7_push", "app.stages.s8_review", "app.runner", "app.nightly", "app.angle_derivation", "app.scale_review", "app.materials_fill",
 ]
 
 _HEALTH_TABLES = [
@@ -423,6 +423,8 @@ def interaction_to_command(payload: dict) -> tuple[str, str | None, str | None]:
             return "kill_modal", batch_id, user
         if action.get("action_id") == "scale_lookalike_10k":
             return "scale_lookalike", batch_id, user
+        if (action.get("action_id") or "").startswith("scale_review_"):
+            return "scale_review", batch_id, user
         if (action.get("action_id") or "").startswith("launch_lookalike"):
             return "launch_lookalike", batch_id, user
         return "ignore", None, user
@@ -472,6 +474,26 @@ async def slack_interact(request: Request) -> JSONResponse:
         threading.Thread(target=slack.open_kill_modal,
                          args=(payload.get("trigger_id"), command, response_url),
                          daemon=True).start()
+        return JSONResponse({})
+
+    if kind == "scale_review":
+        response_url = payload.get("response_url")
+        key, _, new_target = command.rpartition("|")
+
+        def _scale() -> None:
+            from . import scale_review
+            try:
+                r = scale_review.approve(key, int(new_target), user)
+                text = (f":rocket: Approved: *{r['label']}* now scaling to {r['target']:,} leads. _(by {user})_" if r.get("ok")
+                        else f"{key}: {r.get('reason', 'nothing to do')}  _(by {user})_")
+            except Exception as exc:
+                text = f"Could not scale {key}: {exc}  _(by {user})_"
+            if response_url:
+                slack.respond(response_url, text)
+            else:
+                slack.post(text)
+
+        threading.Thread(target=_scale, daemon=True).start()
         return JSONResponse({})
 
     if kind == "scale_lookalike":

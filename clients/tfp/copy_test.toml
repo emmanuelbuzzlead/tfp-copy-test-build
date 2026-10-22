@@ -43,6 +43,16 @@ enabled = true
 mode = "clone_parent"
 campaign_prefix = "TFP_W1_"
 
+[scale_gate]
+# Emmanuel, 2026-10-22: the winner scales to 3,500 first; five days later Slack suggests 5,000 or more (with a button) only if it is doing well.
+stage1_target = 3500
+review_after_days = 5
+min_sends = 1500
+min_interested = 3
+min_interested_per_1000 = 1.0
+next_targets = [5000, 10000]
+max_looks = 3
+
 [scaling]
 champion_topup = 1000
 expand_verticals = 3

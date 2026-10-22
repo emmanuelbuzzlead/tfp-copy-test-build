@@ -767,9 +767,20 @@ def _evaluate_and_record_locked() -> dict:
             except Exception as exc:
                 db.log(None, "testgrid", f"could not pause {loser}: {exc}", level="warn")
         verdict["paused"] = paused
+        # Emmanuel, 2026-10-22: the winner had one interested lead, so it does not jump to 10k. [scale_gate] stage1_target (TFP: 3,500) first; five days later
+        # scale_review reads the results and Slack offers the next step with a button. A client with no [scale_gate] keeps the old straight-to-ceiling rule.
+        stage1 = int((cfg.get("scale_gate") or {}).get("stage1_target") or 0) or None
         slack.post(f":axe: *Copy test decided* -- day-10 winner: *{winner}*. {verdict['reason']}\n"
-                   f"{' and '.join(losers)} paused. Scaling {winner} only, hard.")
-        verdict["scaled"] = auto_expand_champion(winner, None)
+                   f"{' and '.join(losers)} paused. "
+                   + (f"Scaling {winner} to {stage1:,} first. Five days later Slack will say whether to take it further, with a button." if stage1
+                      else f"Scaling {winner} only, hard."))
+        verdict["scaled"] = auto_expand_champion(winner, None, target_leads=stage1)
+        if stage1:
+            try:
+                from . import scale_review
+                scale_review.schedule(f"angle:{winner}", "angle", winner, int(camps[winner]["campaign_id"]), stage1, angle=winner)
+            except Exception as exc:
+                db.log(None, "testgrid", f"could not start the scale review for {winner}: {exc}", level="warn")
         # Troy, 2026-10-07: "we keep testing out those angles [lookalikes]" -- this was
         # described as part of the rule but never actually wired to anything; propose_new_
         # test_angle existed only for the manual/60%-checkpoint path. Fire it automatically
@@ -807,6 +818,9 @@ def _evaluate_and_record_locked() -> dict:
             from .clients import emailbison, slack
             starting = int((emailbison.get_campaign(int(camps[leader]["campaign_id"])) or {}).get("total_leads") or 0)
             early_target = max(starting * 2, starting + 500)
+            stage1 = int((cfg.get("scale_gate") or {}).get("stage1_target") or 0)
+            if stage1:
+                early_target = min(early_target, stage1)
             slack.post(f":chart_with_upwards_trend: *Copy test, day {(datetime.now(timezone.utc) - launched).days}*: "
                        f"{leader} is ahead on today's numbers (not yet statistically separated -- the day-10 cut "
                        f"still waits for that). Scaling {leader} now while the others keep running untouched.")

@@ -150,7 +150,7 @@ def run() -> dict:
 
     # MATERIALS_CAMPAIGN_ID set: the same producer keeps the bank full, but the consumer loads the OG-copy campaign (no research, no email writing)
     # instead of writing copy for the three angle campaigns. Goal and done flag are the campaign's own.
-    mat = materials_fill.campaign_id()
+    mat = materials_fill.enabled()
     done_key = "materials_done" if mat else "done"
     loaded_now = materials_fill.loaded if mat else _loaded
 
@@ -159,13 +159,15 @@ def run() -> dict:
         return {"status": "already_running"}
     try:
         prof = client.profile()
-        target_total = materials_fill.target() if mat else int(os.getenv("SCALE_TARGET_LEADS", "4500"))
+        fixed_target = int(os.getenv("SCALE_TARGET_LEADS", "4500"))
+        target_now = materials_fill.target if mat else (lambda: fixed_target)      # a Slack button can raise a campaign's goal mid-run
+        target_total = target_now()
         bank_cap = int(os.getenv("SCALE_BANK_CAP", "900"))
         min_batch = int(os.getenv("SCALE_MIN_BATCH", "60"))
         source_n = int(os.getenv("SCALE_SOURCE_N", "150"))
         deadline = time.time() + float(os.getenv("SCALE_MAX_HOURS", "20")) * 3600
         st = _load()
-        if st.get(done_key):
+        if (materials_fill.all_done() if mat else st.get(done_key)):
             return {"status": "done"}
         st.setdefault("source_round", 1 if st.get("sourced") else 0)
         run_id = _run_id()
@@ -173,7 +175,7 @@ def run() -> dict:
         stop = threading.Event()
         flags = {"supply_done": False}
         if mat:
-            _say(f"{prof.display_name} OG-copy fill started: goal {target_total} leads in campaign {mat}, {loaded_now()} loaded so far, {_bank()} usable contacts banked. "
+            _say(f"{prof.display_name} OG-copy fill started: goal {target_total} leads across campaign(s) {materials_fill.label()}, {loaded_now()} loaded so far, {_bank()} usable contacts banked. "
                  f"Contact finding keeps the bank full; each batch gets its COMPANY and MATERIALS_HAULED values and loads.")
         else:
             _say(f"{prof.display_name} scale-up started: goal {target_total} leads across the draft campaigns, {_loaded()} loaded so far, {_bank()} usable contacts banked. "
@@ -182,7 +184,7 @@ def run() -> dict:
         def producer() -> None:
             stalls = 0
             try:
-                while not stop.is_set() and time.time() < deadline and loaded_now() < target_total:
+                while not stop.is_set() and time.time() < deadline and loaded_now() < target_now():
                     if _bank() >= bank_cap:
                         time.sleep(20)
                         continue
@@ -211,7 +213,7 @@ def run() -> dict:
         while time.time() < deadline:
             _beat(holder)
             loaded = loaded_now()
-            if loaded >= target_total:
+            if loaded >= target_now():
                 break
             bank = _bank()
             if bank >= min_batch or (flags["supply_done"] and bank > 0):
@@ -226,7 +228,7 @@ def run() -> dict:
                 try:
                     from . import runway
                     if mat:
-                        _say(f"load cycle {st.get('cycles')} done: +{now - loaded}, {now:,} of {target_total:,} in campaign {mat}. Held this pass: "
+                        _say(f"load cycle {st.get('cycles')} done: +{now - loaded}, {now:,} of {target_now():,} across campaign(s) {materials_fill.label()}. Held this pass: "
                              f"{(out or {}).get('held_unclear', 0)} unclear, {(out or {}).get('held_standard', 0)} failed the field standards. Bank {_bank():,}.\n"
                              "Samples (company | hauls): " + "; ".join(f"{a} | {b}" for a, b in ((out or {}).get("samples") or [])[:6]))
                     else:
@@ -246,6 +248,7 @@ def run() -> dict:
                 time.sleep(30)
         stop.set()
         t.join(timeout=120)
+        target_total = target_now()
         final = loaded_now()
         _set(st, **{done_key: final >= target_total, "final_loaded": final})
         _save(st)
@@ -281,7 +284,7 @@ def ensure_running() -> str:
     except Exception:
         return "state unreadable"
     from . import materials_fill
-    if st.get("materials_done" if materials_fill.campaign_id() else "done"):
+    if (materials_fill.all_done() if materials_fill.enabled() else st.get("done")):
         return "done"
     _thread = threading.Thread(target=run_safe, daemon=True)
     _thread.start()

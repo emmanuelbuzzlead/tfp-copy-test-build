@@ -92,9 +92,8 @@ def report() -> str:
     if n["per_hour"] > 0 and n["goal"] > n["loaded"]:
         hours = (min(n["potential"], n["goal"]) - n["loaded"]) / n["per_hour"]
         eta = f" At the last hour's pace ({n['per_hour']:,}/h) the pool runs out in about {hours:.1f} h."
-    og = n.get("og")
-    og_line = ([f"*OG copy campaign {og['campaign']}:* {og['loaded']:,} of {og['target']:,} loaded | last hour +{og['per_hour']:,} | held {og['held_unclear']:,} unclear, "
-                f"{og['held_standard']:,} failed the field standards"] if og else [])
+    og_line = [f"*Campaign {og['campaign']}:* {og['loaded']:,} of {og['target']:,} loaded | last hour +{og['per_hour']:,} | held {og['held_unclear']:,} unclear, "
+               f"{og['held_standard']:,} failed the field standards" for og in (n.get("og") or [])]
     return "\n".join(og_line + [
         f"*TFP runway* ({datetime.now(timezone.utc).strftime('%H:%M')} UTC)",
         f"*Leads:* {n['loaded']:,} of {n['goal']:,} ({pct(n['loaded'], n['goal'])}) | {angles} | target {n['target']:,} each | last hour +{n['per_hour']:,}",
