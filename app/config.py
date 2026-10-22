@@ -728,6 +728,12 @@ class Settings:
             "CONCENTRATE_AI_API_KEY": self.concentrate_api_key,
             "DATABASE_URL": self.database_url,
         }
+        # Verification keys live in the BuzzLead gateway when routed there
+        # (app/clients/gateway_verify.py), so this build no longer needs its own copies.
+        if self.buzzlead_api_key and os.getenv("VERIFY_VIA_GATEWAY", "true").strip().lower() in {
+                "1", "true", "yes", "on"}:
+            for name in ("MILLIONVERIFIER_API_KEY", "TRYKITT_API_KEY", "BOUNCEBAN_API_KEY"):
+                required.pop(name, None)
         return sorted(name for name, value in required.items() if not value)
 
 

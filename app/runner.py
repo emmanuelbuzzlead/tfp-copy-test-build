@@ -900,6 +900,9 @@ def _work_verticals(verticals, run_id: str, dry_run: bool, summary: dict) -> lis
 def vendor_credit_watch(run_id: str | None) -> None:
     """Warn BEFORE a balance hits zero, where a vendor lets us see it. Once a day."""
     import httpx
+    from .clients import gateway_verify
+    if gateway_verify.enabled():
+        return  # the gateway holds the MillionVerifier key; its balance is not visible here
     if not settings.millionverifier_api_key:
         return
     if db.recently_logged("vendors", "MillionVerifier balance", hours=24):

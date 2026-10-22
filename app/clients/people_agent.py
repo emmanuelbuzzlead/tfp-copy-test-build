@@ -212,6 +212,10 @@ def email_candidates(first: str, last: str, domain: str) -> list[str]:
 
 def _mv(email: str) -> str:
     """MillionVerifier verdict for one address: ok, catch_all, invalid, unknown..."""
+    from . import gateway_verify
+    if gateway_verify.enabled():
+        v = gateway_verify.verify_one(email)
+        return "ok" if v == "valid" else v
     key = _env("MILLIONVERIFIER_API_KEY")
     if not key:
         return "unavailable"

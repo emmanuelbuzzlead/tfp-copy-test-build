@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 
 from ..config import settings
+from . import gateway_verify
 
 _ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_ROOT))
@@ -51,6 +52,8 @@ def _api_keys() -> dict:
 
 
 def available() -> tuple[bool, str]:
+    if gateway_verify.enabled():
+        return True, "ok (verification routed through the BuzzLead gateway)"
     if not settings.millionverifier_api_key:
         return False, "MILLIONVERIFIER_API_KEY not set (the waterfall's only hard requirement)"
     return True, "ok"
@@ -65,8 +68,6 @@ def verify_batch(contacts: list[dict], run_id: str | None = None) -> list[dict]:
     """
     if not contacts:
         return []
-
-    from vendor import email_waterfall as ew
 
     # Preflight probes every provider on every call, which is wasted latency inside a
     # run we have already health-checked.
@@ -85,8 +86,19 @@ def verify_batch(contacts: list[dict], run_id: str | None = None) -> list[dict]:
         for c in contacts
     ]
 
-    results = ew.run_waterfall_batch(payload, _api_keys(),
-                                     max_workers=settings.waterfall_workers)
+    if gateway_verify.enabled():
+        # Same cascade, run by the gateway with its keys. Reshaped into the dicts the
+        # local waterfall returns so the matching below does not care which ran.
+        results = [
+            {"first_name": p["first_name"], "last_name": p["last_name"], "domain": p["domain"],
+             "valid_email": g.get("valid_email"), "status": g.get("status"),
+             "email_source": g.get("source"), "steps_run": g.get("steps")}
+            for p, g in zip(payload, gateway_verify.find_and_verify(payload))
+        ]
+    else:
+        from vendor import email_waterfall as ew
+        results = ew.run_waterfall_batch(payload, _api_keys(),
+                                         max_workers=settings.waterfall_workers)
 
     by_person: dict[tuple, dict] = {}
     for r in results:
