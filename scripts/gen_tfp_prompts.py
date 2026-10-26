@@ -257,6 +257,8 @@ random_deal_seed = "tfp-angles-1"
 booked_weight = 3
 min_sends_per_angle = 700
 min_positive_to_decide = 3         # the winner needs this many interested or booked replies before any angle is paused
+min_positive_margin = 2            # ...and this many more than the runner-up, so a close race keeps both running
+reminder_day = 21                  # if there is still no winner this many days after launch, Slack asks what to do
 
 [angle_prompts]
 A5  = "a5-load-type"

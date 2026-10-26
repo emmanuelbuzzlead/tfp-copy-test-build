@@ -30,6 +30,33 @@ def _once_today() -> bool:
         return cur.fetchone() is not None
 
 
+def _once_ever(name: str) -> bool:
+    """True the first time it is called for this name, ever (so a reminder posts once)."""
+    with db.cursor() as cur:
+        cur.execute("CREATE TABLE IF NOT EXISTS nightly_state (name TEXT PRIMARY KEY, last_date TEXT NOT NULL)")
+        cur.execute("INSERT INTO nightly_state (name, last_date) VALUES (%s, 'once') ON CONFLICT (name) DO NOTHING RETURNING 1", (name,))
+        return cur.fetchone() is not None
+
+
+def day_reminder(result: dict) -> bool:
+    """Emmanuel, 2026-10-26: if the test still has no winner reminder_day (21) days after launch, say so in Slack once and ask what to do."""
+    from . import testgrid
+    if result.get("status") != "monitoring":
+        return False
+    cfg = testgrid.load_config() or {}
+    day = int((cfg.get("rules") or {}).get("reminder_day", 0) or 0)
+    if not day:
+        return False
+    with db.cursor() as cur:
+        cur.execute("SELECT min(launched_at) first FROM copy_test_campaigns WHERE is_primary")
+        first = (cur.fetchone() or {}).get("first")
+    if not first or (datetime.now(timezone.utc) - first).days < day or not _once_ever("copy_test_day_reminder"):
+        return False
+    slack.post(f":hourglass: *Copy test, day {day} and still no winner.*\n{status_text(result)}\n"
+               "Options: keep waiting, top up the angles that have interested replies from the page, or tell me to change the bar (3 positive replies, a lead of 2).")
+    return True
+
+
 def status_text(result: dict) -> str:
     by = result.get("by_angle") or {}
     lines = [f":crystal_ball: *Copy test, nightly check* ({result.get('status', 'unknown')})"]
@@ -56,6 +83,10 @@ def run_once() -> dict:
         out["derived"] = angle_derivation.check_derived_angles()
     except Exception as exc:
         db.log(None, "nightly", f"derived-angle check failed: {exc}", level="warn")
+    try:
+        day_reminder(out)
+    except Exception as exc:
+        db.log(None, "nightly", f"day reminder failed: {exc}", level="warn")
     try:
         from . import scale_review
         scale_review.discover_fill_campaigns()

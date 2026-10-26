@@ -364,6 +364,16 @@ def register(cid: int, target_leads: int, materials: bool = False, user: str | N
     return {"ok": True, "campaign": cid, "name": camp.get("name"), "target": target_leads, "loaded": int(camp.get("total_leads") or 0), "materials": materials}
 
 
+def _nudge_angles() -> None:
+    """Run the copy-test scale-up tick now, in the background, instead of waiting for the next two-hourly one."""
+    try:
+        import threading
+        from . import runner
+        threading.Thread(target=runner._tick_copy_test_scaling, daemon=True).start()
+    except Exception:
+        pass
+
+
 def _nudge() -> None:
     """Wake the scale-up job now instead of waiting for its five-minute watchdog."""
     try:
@@ -459,6 +469,8 @@ def add_leads(cid: int, n: int, user: str | None = None) -> dict:
         new_target = max(ang["target"], ang["loaded"] + n)
         res = testgrid.auto_expand_champion(ang["angle"], None, target_leads=new_target)
         db.log(None, "materials_fill", f"add_leads: angle {ang['angle']} (campaign {cid}) {ang['loaded']} -> {new_target} (+{n}) by {user or 'unknown'}: {res}")
+        if res.get("target_set"):
+            _nudge_angles()
         return {"ok": bool(res.get("target_set")), "campaign": cid, "was": ang["loaded"], "target": new_target, "added": n,
                 "reason": res.get("reason", "nothing changed"),
                 "note": f"{ang['angle']} is a copy-test angle: copy is written for each lead and the scale-up runs every 2 hours, so it is slower than a fill campaign. "

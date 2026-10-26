@@ -585,3 +585,36 @@ def test_angle_campaigns_use_the_scale_path_when_leads_are_added(monkeypatch):
     monkeypatch.setattr(testgrid, "auto_expand_champion", lambda angle, run_id=None, target_leads=None, requires_approval=False: seen.update(angle=angle, target=target_leads) or {"target_set": True})
     r = mf.add_leads(2107, 1000, "web page")
     assert r["ok"] and seen == {"angle": "A10", "target": 3373} and "copy-test angle" in r["note"]
+
+
+def test_a_close_race_keeps_both_angles_running_and_day_21_asks_once(monkeypatch):
+    from datetime import datetime, timezone
+    from app import db, nightly, testgrid
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, *a, **k): pass
+        def fetchall(self): return []
+    monkeypatch.setattr(db, "cursor", lambda: Cur())
+    cfg = _cfg()
+    cfg["rules"].update(min_positive_to_decide=3, min_positive_margin=2)
+    launched, now = datetime(2026, 10, 16, tzinfo=timezone.utc), datetime(2026, 11, 20, tzinfo=timezone.utc)
+    rows = {"A5": {"leads": 1500, "sent": 3500, "replied": 20, "interested": 0, "booked": 0, "positive": 0},
+            "A7": {"leads": 1500, "sent": 3500, "replied": 30, "interested": 3, "booked": 0, "positive": 3},
+            "A10": {"leads": 2300, "sent": 2400, "replied": 44, "interested": 4, "booked": 0, "positive": 4}}
+    v = testgrid.decide(rows, launched, cfg, now)
+    assert v["status"] == "monitoring" and "a lead of 2" in v["reason"] and "nobody is paused" in v["reason"]
+    rows["A10"].update(interested=5, positive=5)
+    assert testgrid.decide(rows, launched, cfg, now)["status"] == "decided"                # 5 against 3 is a lead of 2
+    posted = []
+    monkeypatch.setattr(nightly.slack, "post", lambda text, **k: posted.append(text))
+    monkeypatch.setattr(testgrid, "load_config", lambda path=None: dict(cfg, rules=dict(cfg["rules"], reminder_day=21)))
+    class Cur2(Cur):
+        def fetchone(self):
+            return {"first": datetime(2026, 9, 1, tzinfo=timezone.utc)}        # long enough ago that day 21 has passed on any real clock
+    monkeypatch.setattr(db, "cursor", lambda: Cur2())
+    monkeypatch.setattr(nightly, "_once_ever", lambda name: True)
+    assert nightly.day_reminder({"status": "monitoring", "by_angle": rows, "reason": "close"}) is True and "still no winner" in posted[0]
+    monkeypatch.setattr(nightly, "_once_ever", lambda name: False)
+    assert nightly.day_reminder({"status": "monitoring", "by_angle": rows}) is False
+    assert nightly.day_reminder({"status": "decided"}) is False

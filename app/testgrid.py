@@ -344,6 +344,14 @@ def decide(by_angle: dict[str, dict], launched_at: datetime, cfg: dict,
         return {**base, "status": "monitoring", "leader": winner,
                 "reason": f"day {r.get('decision_day', 10)} has passed and {winner} leads, but it has only {got} positive "
                           f"{'reply' if got == 1 else 'replies'} and a call needs {need}; nobody is paused, the test keeps running"}
+    # Emmanuel, 2026-10-26: keep both when it is close. The winner also needs a lead of min_positive_margin positive replies over the runner-up.
+    margin = int(r.get("min_positive_margin", 0) or 0)
+    if margin and len(ranked) > 1:
+        runner, runner_row = ranked[1]
+        runner_got = int(runner_row["interested"]) + int(runner_row["booked"])
+        if got - runner_got < margin:
+            return {**base, "status": "monitoring", "leader": winner,
+                    "reason": f"{winner} has {got} positive replies and {runner} has {runner_got}; a call needs a lead of {margin}, so nobody is paused and the test keeps running"}
     losers = [a for a, _ in ranked[1:]]
     unit = "per email sent" if winner_row.get("sent") is not None else "per lead"
     detail = ", ".join(f"{a} {_score(rw, w)[0]:.2%}" for a, rw in ranked)
