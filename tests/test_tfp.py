@@ -544,13 +544,24 @@ def test_slack_add_leads_button_and_commands_are_wired():
     assert "confirm" in inspect.getsource(mf.controls_blocks)             # every button asks "are you sure" first
 
 
-def test_page_has_a_500_to_3000_picker_per_campaign_and_the_endpoint_needs_the_password(monkeypatch):
+def test_page_has_one_dropdown_with_simple_labels_and_the_endpoint_needs_the_password(monkeypatch):
     from app import materials_fill, runway_page, web
-    monkeypatch.setattr(materials_fill, "overview", lambda: [
-        {"campaign": 2107, "kind": "angle", "angle": "A10", "name": "A10 peer proof", "loaded": 2373, "target": 2973, "sent": 2441, "interested": 1},
-        {"campaign": 2174, "kind": "fill", "angle": None, "name": "Simple one liners", "loaded": 2103, "target": 2100, "sent": 1046, "interested": 0}])
+    rows = [
+        {"campaign": 2103, "kind": "angle", "angle": "A5", "name": "A5 load type", "loaded": 1547, "target": 1500, "sent": 3561, "interested": 0, "waiting": 2, "days_left": 0.0,
+         "recommendation": "No interested yet", "queue": "out of leads"},
+        {"campaign": 2107, "kind": "angle", "angle": "A10", "name": "A10 peer proof", "loaded": 2373, "target": 2973, "sent": 2441, "interested": 1, "waiting": 1063, "days_left": 8.1,
+         "recommendation": "Recommended", "queue": "8 days of leads left"},
+        {"campaign": 2106, "kind": "angle", "angle": "A7", "name": "A7 carrier", "loaded": 1507, "target": 1500, "sent": 3538, "interested": 1, "waiting": 2, "days_left": 0.0,
+         "recommendation": "Recommended", "queue": "out of leads"}]
+    monkeypatch.setattr(materials_fill, "overview", lambda: rows)
+    assert materials_fill.suggested(rows) == 2106                      # both have an interested reply; A7 runs out of leads first
     html = runway_page._controls_html()
-    assert 'id="n-2107"' in html and 'id="n-2174"' in html and 'value="500"' in html and 'value="3000"' in html and "addLeads(2174)" in html
+    assert html.count('<select id="camp">') == 1 and 'value="2106" selected' in html and "1 interested, out of leads, Recommended" in html
+    assert "0 interested, out of leads, No interested yet" in html and 'value="500"' in html and 'value="3000"' in html and 'onclick="addLeads()"' in html
+    none = [dict(r, interested=0, recommendation="No interested yet") for r in rows]
+    monkeypatch.setattr(materials_fill, "overview", lambda: none)
+    assert materials_fill.suggested(none) is None and "none is recommended" in runway_page._controls_html()
+    monkeypatch.setattr(materials_fill, "overview", lambda: rows)
     assert "/api/add-leads" in runway_page.ADD_JS and "Authorization" in runway_page.ADD_JS
     from fastapi.testclient import TestClient
     monkeypatch.setenv("ADMIN_TOKEN", "s3cret")

@@ -87,14 +87,15 @@ def _row(name: str, val: float, of: float, text: str, cls: str = "") -> str:
 
 ADD_JS = """<script>
 function tfpToken(){try{return localStorage.getItem('tfp_admin')||'';}catch(e){return '';}}
-async function addLeads(id){
-  const n=document.getElementById('n-'+id).value, msg=document.getElementById('m-'+id);
+async function addLeads(){
+  const id=document.getElementById('camp').value, n=document.getElementById('amount').value, msg=document.getElementById('msg');
+  if(!id){msg.textContent='Pick a campaign first.';return;}
   let t=tfpToken();
   if(!t){t=prompt('Admin password (the ADMIN_TOKEN value in the Railway variables)')||'';if(!t){return;}}
   if(!confirm('Add '+Number(n).toLocaleString()+' leads to campaign '+id+'? It spends contact search and verification credits.')){return;}
   msg.textContent='working...';
   try{
-    const r=await fetch('/api/add-leads',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({campaign:id,leads:Number(n)})});
+    const r=await fetch('/api/add-leads',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({campaign:Number(id),leads:Number(n)})});
     const j=await r.json().catch(function(){return {};});
     if(r.status===401){try{localStorage.removeItem('tfp_admin');}catch(e){} msg.textContent='Wrong password.';return;}
     try{localStorage.setItem('tfp_admin',t);}catch(e){}
@@ -107,7 +108,9 @@ setInterval(function(){if(Date.now()-lastTouch>180000){location.reload();}},6000
 
 
 def _controls_html() -> str:
-    """One row per campaign with a 500 to 3,000 picker and an Add leads button. The button asks for the admin password (ADMIN_TOKEN) the first time."""
+    """One dropdown of every campaign (interested replies, leads left, and Recommended or not), an amount from 500 to 3,000, and one Add leads button.
+    A campaign with an interested reply is Recommended; the one that runs out of leads soonest is preselected. The button asks for the admin password
+    (ADMIN_TOKEN) the first time."""
     try:
         from . import materials_fill
         rows = materials_fill.overview()
@@ -115,13 +118,17 @@ def _controls_html() -> str:
         return ""
     if not rows:
         return ""
-    opts = "".join(f'<option value="{v}">{v:,}</option>' for v in (500, 1000, 1500, 2000, 2500, 3000))
-    body = "".join(
-        f'<div class="row"><div class="name">{escape(str(r["name"]))} (campaign {r["campaign"]}{", copy test " + escape(str(r["angle"])) if r.get("angle") else ""}): '
-        f'{r["loaded"]:,} loaded</div><div class="val" style="width:auto"><select id="n-{r["campaign"]}">{opts}</select> '
-        f'<button type="button" onclick="addLeads({r["campaign"]})">Add leads</button> <span id="m-{r["campaign"]}" class="sub"></span></div></div>' for r in rows)
-    return ('<h2>Add leads to a campaign</h2><div class="panel">' + body +
-            '<p class="sub">Pick 500 to 3,000 and press Add leads. It raises the goal of that campaign and finds the contacts, and spends credits. '
+    pick = materials_fill.suggested(rows)
+    camp_opts = ('<option value="">Pick a campaign</option>' if pick is None else "") + "".join(
+        f'<option value="{r["campaign"]}"{" selected" if r["campaign"] == pick else ""}>{escape(str(r["name"]))} ({r["campaign"]}): '
+        f'{r["interested"]} interested, {escape(r["queue"])}, {escape(r["recommendation"])}</option>' for r in rows)
+    amounts = "".join(f'<option value="{v}">{v:,}</option>' for v in (500, 1000, 1500, 2000, 2500, 3000))
+    note = ("" if pick is not None else '<p class="sub">No campaign has an interested reply yet, so none is recommended. You can still pick one.</p>')
+    return ('<h2>Add leads to a campaign</h2><div class="panel"><div class="row"><div class="name">Campaign</div><div class="val" style="width:auto">'
+            f'<select id="camp">{camp_opts}</select></div></div>'
+            f'<div class="row"><div class="name">How many leads</div><div class="val" style="width:auto"><select id="amount">{amounts}</select> '
+            '<button type="button" onclick="addLeads()">Add leads</button> <span id="msg" class="sub"></span></div></div>' + note +
+            '<p class="sub">Recommended means the campaign has at least one interested reply. Pressing the button raises the goal and finds the contacts, and spends credits. '
             'Copy-test campaigns are slower because copy is written for each lead, and adding to one tips the balance of the test.</p></div>')
 
 

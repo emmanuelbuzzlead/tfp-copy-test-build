@@ -373,6 +373,35 @@ def _nudge() -> None:
         pass
 
 
+def _queue(camp: dict, start) -> dict:
+    """Leads still waiting to be emailed and how many days that lasts at the pace so far. start is when the campaign began sending (or was created)."""
+    from datetime import datetime, timezone
+    leads = int(camp.get("total_leads") or 0)
+    contacted = int(camp.get("total_leads_contacted") or 0)
+    waiting = max(leads - contacted, 0)
+    if isinstance(start, str):
+        try:
+            start = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        except ValueError:
+            start = None
+    days = max((datetime.now(timezone.utc) - start).days, 1) if start else None
+    pace = contacted / days if days else 0
+    days_left = (waiting / pace) if pace > 0 else None
+    return {"waiting": waiting, "days_left": days_left}
+
+
+def _label(interested: int, waiting: int, days_left) -> tuple[str, str]:
+    """Two plain words for the dropdown: (recommendation, queue). Recommended means it has at least one interested reply."""
+    rec = "Recommended" if interested >= 1 else "No interested yet"
+    if waiting <= 5:
+        queue = "out of leads"
+    elif days_left is None:
+        queue = f"{waiting:,} leads waiting"
+    else:
+        queue = f"{days_left:.0f} days of leads left"
+    return rec, queue
+
+
 def overview() -> list[dict]:
     """Every campaign the controls can add leads to: the copy-test angle campaigns and the fill campaigns, with where each stands."""
     from .clients import emailbison
@@ -381,20 +410,40 @@ def overview() -> list[dict]:
         from . import testgrid
         fill_target = int(((testgrid.load_config() or {}).get("fill") or {}).get("target", 0))
         with db.cursor() as cur:
-            cur.execute("SELECT angle, campaign_id FROM copy_test_campaigns WHERE is_primary ORDER BY angle")
-            angles = [(r["angle"], int(r["campaign_id"])) for r in cur.fetchall()]
+            cur.execute("SELECT angle, campaign_id, launched_at FROM copy_test_campaigns WHERE is_primary ORDER BY angle")
+            angles = [(r["angle"], int(r["campaign_id"]), r["launched_at"]) for r in cur.fetchall()]
             cur.execute("SELECT angle, target_leads FROM scale_targets")
             raised = {r["angle"]: int(r["target_leads"]) for r in cur.fetchall()}
     except Exception:
         angles, raised, fill_target = [], {}, 0
-    for angle, cid in angles:
+    for angle, cid, launched in angles:
         c = emailbison.get_campaign(cid) or {}
+        q = _queue(c, launched)
+        interested = int(c.get("interested") or 0)
+        rec, queue = _label(interested, q["waiting"], q["days_left"])
         out.append({"campaign": cid, "kind": "angle", "angle": angle, "name": c.get("name") or angle, "loaded": int(c.get("total_leads") or 0),
-                    "target": max(fill_target, raised.get(angle, 0)), "sent": int(c.get("emails_sent") or 0), "interested": int(c.get("interested") or 0)})
+                    "target": max(fill_target, raised.get(angle, 0)), "sent": int(c.get("emails_sent") or 0), "interested": interested,
+                    "waiting": q["waiting"], "days_left": q["days_left"], "recommendation": rec, "queue": queue})
     for c in (status() or []):
+        camp = {}
+        try:
+            camp = emailbison.get_campaign(c["campaign"]) or {}
+        except Exception:
+            pass
+        q = _queue(camp, camp.get("created_at"))
+        rec, queue = _label(int(c.get("interested", 0)), q["waiting"], q["days_left"])
         out.append({"campaign": c["campaign"], "kind": "fill", "angle": None, "name": c.get("name") or f"campaign {c['campaign']}", "loaded": c["loaded"],
-                    "target": c["target"], "sent": c.get("sent", 0), "interested": c.get("interested", 0)})
+                    "target": c["target"], "sent": c.get("sent", 0), "interested": c.get("interested", 0),
+                    "waiting": q["waiting"], "days_left": q["days_left"], "recommendation": rec, "queue": queue})
     return out
+
+
+def suggested(rows: list[dict]) -> int | None:
+    """The campaign to preselect: among those with an interested reply, the one that runs out of leads soonest. None when nobody has one yet."""
+    good = [r for r in rows if r["recommendation"] == "Recommended"]
+    if not good:
+        return None
+    return min(good, key=lambda r: (r["days_left"] if r["days_left"] is not None else 9999)) ["campaign"]
 
 
 def add_leads(cid: int, n: int, user: str | None = None) -> dict:
@@ -437,8 +486,8 @@ def controls_blocks() -> list[dict]:
     """A Slack message: each fill campaign with its progress and +500 / +1,000 buttons (each asks 'are you sure' first)."""
     blocks: list[dict] = []
     for c in overview():
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*{c.get('name') or 'Campaign'}* (campaign {c['campaign']}{', copy test ' + c['angle'] if c.get('angle') else ''}): {c['loaded']:,} of {c['target']:,} loaded"
-                       + (f", {c['sent']:,} sent, {c['interested']} interested" if c.get("sent") else ", nothing sent yet")}})
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*{c.get('name') or 'Campaign'}* (campaign {c['campaign']}{', copy test ' + c['angle'] if c.get('angle') else ''}): "
+                       f"{c['interested']} interested, {c['queue']}. *{c['recommendation']}*"}})
         elements = []
         for n in (500, 1000, 3000):
             elements.append({"type": "button", "text": {"type": "plain_text", "text": f"Add {n:,} leads"}, "action_id": f"add_leads_{n}", "value": f"{c['campaign']}|{n}",
