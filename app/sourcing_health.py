@@ -99,6 +99,33 @@ def providers() -> dict:
     return {"keys": status, "openrouter_balance": balance, "vendor_error_lines_last_hour": errors, "latest_vendor_error": sample}
 
 
+_verifier_cache: dict = {"at": 0.0, "ok": True, "text": ""}
+
+
+def verifier_ok(max_age: float = 300.0) -> tuple[bool, str]:
+    """Is email verification working? One MillionVerifier check on a throwaway address (a few minutes cached). 2026-10-26: the key answered result=error with 0
+    credits, every candidate came back unverified, and chunks of 250 companies found no usable contact. The same call through the BuzzLead verify tool returned
+    an empty quality for every address, so the cause is out-of-credit, not the key. Contact search waits while this says no."""
+    import time
+    if _verifier_cache["text"] and time.time() - _verifier_cache["at"] < max_age:
+        return _verifier_cache["ok"], _verifier_cache["text"]
+    key = os.getenv("MILLIONVERIFIER_API_KEY")
+    if not key:
+        ok, text = False, "MILLIONVERIFIER_API_KEY is not set"
+    else:
+        try:
+            import httpx
+            data = httpx.get("https://api.millionverifier.com/api/v3/", params={"api": key, "email": "probe@example.com", "timeout": 10}, timeout=30).json()
+            if data.get("result") == "error" or data.get("error"):
+                ok, text = False, f"MillionVerifier answers error (credits {data.get('credits', 0)}): {data.get('error') or 'out of credits or key rejected'}"
+            else:
+                ok, text = True, f"MillionVerifier ok (credits {data.get('credits', '?')})"
+        except Exception as exc:
+            ok, text = True, f"MillionVerifier check could not run ({type(exc).__name__}); not blocking"
+    _verifier_cache.update(at=time.time(), ok=ok, text=text)
+    return ok, text
+
+
 _probe_cache: dict = {"at": 0.0, "text": ""}
 PROBE_DOMAIN = "usps.com"          # a large public company every finder should know; a probe costs about one credit per provider
 
@@ -150,6 +177,7 @@ def report() -> str:
         "",
         "Providers: " + "; ".join(f"{g}: {', '.join(x for x in v if 'MISSING' in x) or 'all set'}" for g, v in p["keys"].items()),
         f"Finder probe: {probe()}",
+        f"Email verification: {verifier_ok()[1]}",
         f"OpenRouter balance: {'$' + str(p['openrouter_balance']) if p['openrouter_balance'] is not None else 'unknown'} | vendor error lines in the last hour: {p['vendor_error_lines_last_hour']}"
         + (f" (latest: {p['latest_vendor_error']})" if p["latest_vendor_error"] else ""),
     ]

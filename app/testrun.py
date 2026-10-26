@@ -164,6 +164,23 @@ def _claim_peek(prof) -> bool:
 
 
 _trips = {"count": 0, "until": 0.0}
+_verifier_state = {"alerted": False}
+
+
+def _verifier_blocked() -> bool:
+    """Contact search waits while email verification is down (MillionVerifier out of credits, 2026-10-26), instead of searching companies it cannot verify.
+    One Slack line when it goes down and one when it is back; the check is cached for five minutes."""
+    from . import sourcing_health
+    ok, text = sourcing_health.verifier_ok()
+    if ok:
+        if _verifier_state["alerted"]:
+            _verifier_state["alerted"] = False
+            _say("Email verification is working again; contact search resumes.")
+        return False
+    if not _verifier_state["alerted"]:
+        _verifier_state["alerted"] = True
+        _say(f":warning: Email verification is down: {text}. Contact search is paused so no companies are used up. It resumes by itself once verification works.")
+    return True
 
 
 def _paused() -> bool:
@@ -282,6 +299,9 @@ def run() -> dict:
                 while not stop.is_set() and time.time() < deadline and loaded_now() < target_now():
                     if _bank() >= bank_cap or _paused():
                         time.sleep(20)
+                        continue
+                    if _verifier_blocked():
+                        time.sleep(60)
                         continue
                     if _one_chunk(prof, st, run_id, chunk_n) != 0:
                         continue

@@ -584,7 +584,7 @@ def test_angle_campaigns_use_the_scale_path_when_leads_are_added(monkeypatch):
     seen = {}
     monkeypatch.setattr(testgrid, "auto_expand_champion", lambda angle, run_id=None, target_leads=None, requires_approval=False: seen.update(angle=angle, target=target_leads) or {"target_set": True})
     r = mf.add_leads(2107, 1000, "web page")
-    assert r["ok"] and seen == {"angle": "A10", "target": 3373} and "copy-test angle" in r["note"]
+    assert r["ok"] and seen == {"angle": "A10", "target": 3973} and "copy-test angle" in r["note"]       # 2,973 goal not yet reached, plus 1,000
 
 
 def test_a_close_race_keeps_both_angles_running_and_day_21_asks_once(monkeypatch):
@@ -618,3 +618,33 @@ def test_a_close_race_keeps_both_angles_running_and_day_21_asks_once(monkeypatch
     monkeypatch.setattr(nightly, "_once_ever", lambda name: False)
     assert nightly.day_reminder({"status": "monitoring", "by_angle": rows}) is False
     assert nightly.day_reminder({"status": "decided"}) is False
+
+
+def test_contact_search_waits_while_verification_is_down_and_resumes_when_it_is_back(monkeypatch):
+    from app import sourcing_health, testrun
+    said = []
+    monkeypatch.setattr(testrun, "_say", lambda t: said.append(t))
+    testrun._verifier_state["alerted"] = False
+    state = {"ok": False}
+    monkeypatch.setattr(sourcing_health, "verifier_ok", lambda max_age=300.0: (state["ok"], "MillionVerifier answers error (credits 0)"))
+    assert testrun._verifier_blocked() is True and testrun._verifier_blocked() is True
+    assert len(said) == 1 and "verification is down" in said[0] and "resumes by itself" in said[0]       # one alert, not one per check
+    state["ok"] = True
+    assert testrun._verifier_blocked() is False and "working again" in said[1]
+    assert testrun._verifier_blocked() is False and len(said) == 2
+
+
+def test_verifier_check_reads_the_millionverifier_error_answer(monkeypatch):
+    import httpx
+    from app import sourcing_health as sh
+    class R:
+        def __init__(self, d): self.d = d
+        def json(self): return self.d
+    monkeypatch.setenv("MILLIONVERIFIER_API_KEY", "k")
+    sh._verifier_cache.update(at=0.0, ok=True, text="")
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: R({"result": "error", "resultcode": 4, "credits": 0}))
+    assert sh.verifier_ok(0)[0] is False
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: R({"result": "invalid", "credits": 9000}))
+    assert sh.verifier_ok(0) == (True, "MillionVerifier ok (credits 9000)")
+    monkeypatch.delenv("MILLIONVERIFIER_API_KEY")
+    assert sh.verifier_ok(0)[0] is False

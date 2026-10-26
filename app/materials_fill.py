@@ -457,8 +457,8 @@ def suggested(rows: list[dict]) -> int | None:
 
 
 def add_leads(cid: int, n: int, user: str | None = None) -> dict:
-    """The button: add n more leads to a campaign this fill loads. The goal becomes what is in the campaign now plus n; the job picks it up and the
-    producer finds the contacts. Capped per press (MAX_ADD_LEADS, default 2,000)."""
+    """The button: add n more leads to a campaign. The goal becomes the larger of its current goal and what it holds, plus n (so a campaign with a goal it has
+    not reached yet still gets n more on top); the job picks it up and the producer finds the contacts. Capped per press (MAX_ADD_LEADS, default 3,000)."""
     n = int(n)
     if n <= 0 or n > MAX_ADD:
         return {"ok": False, "reason": f"pick between 1 and {MAX_ADD:,} leads"}
@@ -466,7 +466,7 @@ def add_leads(cid: int, n: int, user: str | None = None) -> dict:
     if ang:
         # A copy-test angle: the existing scale-up path raises its goal and the two-hourly tick writes the copy and loads it.
         from . import testgrid
-        new_target = max(ang["target"], ang["loaded"] + n)
+        new_target = max(ang["target"], ang["loaded"]) + n          # on top of any goal it has not reached yet, so a press always adds n
         res = testgrid.auto_expand_champion(ang["angle"], None, target_leads=new_target)
         db.log(None, "materials_fill", f"add_leads: angle {ang['angle']} (campaign {cid}) {ang['loaded']} -> {new_target} (+{n}) by {user or 'unknown'}: {res}")
         if res.get("target_set"):
@@ -479,7 +479,7 @@ def add_leads(cid: int, n: int, user: str | None = None) -> dict:
     if not sp:
         return {"ok": False, "reason": f"campaign {cid} is not one of this client's campaigns. Register a fill campaign with `register {cid} <target> company`"}
     now = loaded(cid)
-    new_target = max(sp["target"], now + n)
+    new_target = max(sp["target"], now) + n                       # on top of any goal it has not reached yet, so a press always adds n
     raise_target(cid, new_target)
     note = ""
     try:
