@@ -99,6 +99,40 @@ def providers() -> dict:
     return {"keys": status, "openrouter_balance": balance, "vendor_error_lines_last_hour": errors, "latest_vendor_error": sample}
 
 
+_probe_cache: dict = {"at": 0.0, "text": ""}
+PROBE_DOMAIN = "usps.com"          # a large public company every finder should know; a probe costs about one credit per provider
+
+
+def probe(force: bool = False, max_age: float = 1800.0) -> str:
+    """One live call to each contact finder. A finder that errors OR answers with nothing for a company that has plenty of people is named. AI Ark swallows
+    an auth failure and returns an empty list, so its printed error is captured here and reported (2026-10-26: 'Unauthorized' on every call, no alarm)."""
+    import contextlib
+    import io
+    import time
+    if not force and _probe_cache["text"] and time.time() - _probe_cache["at"] < max_age:
+        return _probe_cache["text"]
+    from . import finders
+    from .clients import quickenrich
+    titles = ["Safety Manager", "Operations Manager", "Plant Manager"]
+    parts = []
+    for name, fn in (("QuickEnrich", quickenrich.find_people), ("AI Ark", finders.find_aiark)):
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                out = fn(PROBE_DOMAIN, titles, 3)
+            said = buf.getvalue()
+            if re.search(r"auth failed|unauthori[sz]ed|invalid.?(api)?.?key|402|payment", said, re.I):
+                parts.append(f"{name}: KEY REJECTED")
+            elif not out:
+                parts.append(f"{name}: returned nothing")
+            else:
+                parts.append(f"{name}: ok ({len(out)} people)")
+        except Exception as exc:
+            parts.append(f"{name}: ERROR {type(exc).__name__}: {str(exc)[:80]}")
+    _probe_cache.update(at=time.time(), text="; ".join(parts))
+    return _probe_cache["text"]
+
+
 def report() -> str:
     s = scorecard()
     p = providers()
@@ -115,6 +149,7 @@ def report() -> str:
         "Cost per contact: not measured (this build keeps no spend ledger)",
         "",
         "Providers: " + "; ".join(f"{g}: {', '.join(x for x in v if 'MISSING' in x) or 'all set'}" for g, v in p["keys"].items()),
+        f"Finder probe: {probe()}",
         f"OpenRouter balance: {'$' + str(p['openrouter_balance']) if p['openrouter_balance'] is not None else 'unknown'} | vendor error lines in the last hour: {p['vendor_error_lines_last_hour']}"
         + (f" (latest: {p['latest_vendor_error']})" if p["latest_vendor_error"] else ""),
     ]

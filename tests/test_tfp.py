@@ -467,3 +467,28 @@ def test_scorecard_report_is_plain_and_flags_unmeasured_cost(monkeypatch):
     out = sh.report()
     assert "Gave at least one contact: 260 (26.0%)" in out and "Cost per contact: not measured" in out
     assert "email verification: TRYKITT_API_KEY: MISSING" in out and "Bounce rate of what was sent: 4.0%" in out and "$71.5" in out
+
+
+def test_yield_breaker_puts_the_chunk_back_and_pauses_instead_of_burning_companies(monkeypatch):
+    from app import company_fit, db, scaling, testrun
+    class Cur:
+        calls = []
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, sql, params=None): Cur.calls.append(sql)
+        def fetchone(self): return {"n": 0}
+    monkeypatch.setattr(db, "cursor", lambda: Cur())
+    companies = [{"domain": f"c{i}.com", "name": f"C{i}", "vertical": "V"} for i in range(250)]
+    monkeypatch.setattr(testrun, "_claim", lambda prof, n: companies)
+    monkeypatch.setattr(scaling, "source_contacts", lambda comps, run_id: [{"company_domain": "c1.com"}])      # 1 of 250 gave a contact
+    monkeypatch.setattr(company_fit, "check", lambda *a, **k: {})
+    said = []
+    monkeypatch.setattr(testrun, "_say", lambda text: said.append(text))
+    from app import sourcing_health
+    monkeypatch.setattr(sourcing_health, "probe", lambda force=False: "AI Ark: KEY REJECTED")
+    testrun._trips.update(count=0, until=0.0)
+    class Prof: verticals = ("V",)
+    assert testrun._one_chunk(Prof, {}, "run", 250) == -1
+    assert testrun._paused() is True and any("found_at = NULL" in c for c in Cur.calls)
+    assert said and "yield collapsed" in said[0] and "AI Ark: KEY REJECTED" in said[0]
+    testrun._trips.update(count=0, until=0.0)

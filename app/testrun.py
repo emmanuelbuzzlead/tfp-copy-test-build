@@ -163,8 +163,39 @@ def _claim_peek(prof) -> bool:
         return any(c["domain"] not in _claimed for c in scaling.pick_companies(list(prof.verticals), 1 + len(_claimed)))
 
 
+_trips = {"count": 0, "until": 0.0}
+
+
+def _paused() -> bool:
+    return time.time() < _trips["until"]
+
+
+def _trip(companies: list[dict], found: int, floor: float) -> None:
+    """A chunk found far fewer contacts than normal. Un-mark its companies that have no contacts so they are searched again, pause the producer
+    (15 minutes, doubling each time up to 4 hours), and alert Slack with the provider probe."""
+    domains = [c["domain"] for c in companies]
+    with db.cursor() as cur:
+        cur.execute("""UPDATE staged_companies s SET found_at = NULL WHERE s.domain = ANY(%s)
+                       AND NOT EXISTS (SELECT 1 FROM contacts c WHERE c.company_domain = s.domain)""", (domains,))
+    with _claim_lock:
+        if _paused():
+            return                       # a sibling chunk already tripped the breaker and alerted
+        _trips["count"] += 1
+        minutes = min(15 * 2 ** (_trips["count"] - 1), 240)
+        _trips["until"] = time.time() + minutes * 60
+        count = _trips["count"]
+    try:
+        from . import sourcing_health
+        probe = sourcing_health.probe(force=True)
+    except Exception as exc:
+        probe = f"probe failed: {str(exc)[:100]}"
+    _say(f":rotating_light: Contact search yield collapsed: {found} of {len(companies)} companies gave contacts, where the floor is {floor:.0%}. The companies were put back, "
+         f"so nothing is lost. Paused {minutes} minutes (trip {count}). Provider check: {probe}")
+
+
 def _one_chunk(prof, st: dict, run_id: str, n: int = 200) -> int:
-    """Search up to n staged companies for contacts. Fit-before-verify runs inside stage 4. Returns how many companies were searched (0 = none left)."""
+    """Search up to n staged companies for contacts. Fit-before-verify runs inside stage 4. Returns how many companies were searched (0 = none left,
+    -1 = the yield breaker tripped and the chunk was put back)."""
     from . import company_fit, scaling
     companies = _claim(prof, n)
     if not companies:
@@ -178,6 +209,14 @@ def _one_chunk(prof, st: dict, run_id: str, n: int = 200) -> int:
     finally:
         with _claim_lock:
             _claimed.difference_update(c["domain"] for c in companies)
+    # The breaker. 2026-10-23 21:00 to 10-24 10:00 UTC roughly 11,000 companies were marked searched with almost no contacts found (5 per 1,500) because a finder
+    # answered with nothing and the other one's key was rejected, and no alarm fired. A chunk that yields far below the normal rate is a provider problem, not
+    # 250 companies with no contacts: put the companies back, stop, say so, and try again later.
+    floor = float(os.getenv("SCALE_MIN_YIELD", "0.04"))
+    if len(companies) >= 100 and len(with_contacts) / len(companies) < floor:
+        _trip(companies, len(with_contacts), floor)
+        return -1
+    _trips["count"] = 0
     _bump(st, searched=len(companies), with_contacts=len(with_contacts), fit_passed=len(passing), chunks=1)
     _save(st)
     line = (f"contacts: {len(companies)} companies searched, {len(with_contacts)} had contacts that passed the fit check (judged before verification); "
@@ -241,10 +280,10 @@ def run() -> dict:
         def producer() -> None:
             try:
                 while not stop.is_set() and time.time() < deadline and loaded_now() < target_now():
-                    if _bank() >= bank_cap:
+                    if _bank() >= bank_cap or _paused():
                         time.sleep(20)
                         continue
-                    if _one_chunk(prof, st, run_id, chunk_n) > 0:
+                    if _one_chunk(prof, st, run_id, chunk_n) != 0:
                         continue
                     # no companies left to search: one worker at a time sources another, bigger round
                     with src_lock:
