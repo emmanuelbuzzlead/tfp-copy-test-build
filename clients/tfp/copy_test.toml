@@ -31,6 +31,7 @@ positive_events = ["interested", "booked"]
 random_deal_seed = "tfp-angles-1"
 booked_weight = 3
 min_sends_per_angle = 700
+min_positive_to_decide = 3         # the winner needs this many interested or booked replies before any angle is paused
 
 [angle_prompts]
 A5  = "a5-load-type"

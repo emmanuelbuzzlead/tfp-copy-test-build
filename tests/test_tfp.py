@@ -492,3 +492,25 @@ def test_yield_breaker_puts_the_chunk_back_and_pauses_instead_of_burning_compani
     assert testrun._paused() is True and any("found_at = NULL" in c for c in Cur.calls)
     assert said and "yield collapsed" in said[0] and "AI Ark: KEY REJECTED" in said[0]
     testrun._trips.update(count=0, until=0.0)
+
+
+def test_a_single_interested_reply_never_decides_the_test_or_pauses_anyone(monkeypatch):
+    from datetime import datetime, timezone
+    from app import testgrid, db
+    class Cur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def execute(self, *a, **k): pass
+        def fetchall(self): return []
+    monkeypatch.setattr(db, "cursor", lambda: Cur())
+    cfg = _cfg()
+    cfg["rules"]["min_positive_to_decide"] = 3
+    launched, now = datetime(2026, 10, 16, tzinfo=timezone.utc), datetime(2026, 10, 27, tzinfo=timezone.utc)
+    tie = {"A5": {"leads": 1500, "sent": 3500, "replied": 20, "interested": 0, "booked": 0, "positive": 0},
+           "A7": {"leads": 1500, "sent": 3500, "replied": 30, "interested": 1, "booked": 0, "positive": 1},
+           "A10": {"leads": 2300, "sent": 2400, "replied": 44, "interested": 1, "booked": 0, "positive": 1}}
+    v = testgrid.decide(tie, launched, cfg, now)
+    assert v["status"] == "monitoring" and "only 1 positive reply" in v["reason"] and "nobody is paused" in v["reason"]
+    tie["A10"].update(interested=3, positive=3)
+    v = testgrid.decide(tie, launched, cfg, now)
+    assert v["status"] == "decided" and v["winner"] == "A10"

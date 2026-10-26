@@ -336,6 +336,14 @@ def decide(by_angle: dict[str, dict], launched_at: datetime, cfg: dict,
         return {**base, "status": "monitoring",
                 "reason": f"day {r.get('decision_day', 10)} has passed but no angle has a single interested or booked reply yet, so there is nothing to rank; "
                           f"nobody is paused on a tie"}
+    # Emmanuel, 2026-10-26: "guard it." A pause archives a campaign and the code has no confirmed way back, so it must not rest on one lucky reply. On day 10
+    # the leader had 1 interested against 1 for the runner-up. The winner needs min_positive_to_decide positive replies (interested or booked) first.
+    need = int(r.get("min_positive_to_decide", 0) or 0)
+    got = int(winner_row["interested"]) + int(winner_row["booked"])
+    if got < need:
+        return {**base, "status": "monitoring", "leader": winner,
+                "reason": f"day {r.get('decision_day', 10)} has passed and {winner} leads, but it has only {got} positive "
+                          f"{'reply' if got == 1 else 'replies'} and a call needs {need}; nobody is paused, the test keeps running"}
     losers = [a for a, _ in ranked[1:]]
     unit = "per email sent" if winner_row.get("sent") is not None else "per lead"
     detail = ", ".join(f"{a} {_score(rw, w)[0]:.2%}" for a, rw in ranked)
