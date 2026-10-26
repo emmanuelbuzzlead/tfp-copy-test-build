@@ -110,7 +110,20 @@ def verifier_ok(max_age: float = 300.0) -> tuple[bool, str]:
     if _verifier_cache["text"] and time.time() - _verifier_cache["at"] < max_age:
         return _verifier_cache["ok"], _verifier_cache["text"]
     key = os.getenv("MILLIONVERIFIER_API_KEY")
-    if not key:
+    from .clients import gateway_verify
+    if gateway_verify.enabled():
+        # The path this build really uses (app/clients/waterfall.py routes through the BuzzLead gateway when a BuzzLead key exists), so the build's own direct
+        # MillionVerifier key is irrelevant. MV working returns a quality word ("quality=bad"); down returns "quality=" with nothing after it.
+        try:
+            row = (gateway_verify.verify_many(["info@microsoft.com"], ["millionverifier"]).get("info@microsoft.com") or {})
+            steps = " ".join(str(x) for x in (row.get("steps") or []))
+            if re.search(r"quality=\w+", steps):
+                ok, text = True, "email verification ok (BuzzLead gateway, MillionVerifier answering)"
+            else:
+                ok, text = False, "the BuzzLead gateway's MillionVerifier answers with an empty quality for every address (out of credits or down on the BuzzLead side)"
+        except Exception as exc:
+            ok, text = True, f"gateway check could not run ({type(exc).__name__}); not blocking"
+    elif not key:
         ok, text = False, "MILLIONVERIFIER_API_KEY is not set"
     else:
         try:

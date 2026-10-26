@@ -648,3 +648,17 @@ def test_verifier_check_reads_the_millionverifier_error_answer(monkeypatch):
     assert sh.verifier_ok(0) == (True, "MillionVerifier ok (credits 9000)")
     monkeypatch.delenv("MILLIONVERIFIER_API_KEY")
     assert sh.verifier_ok(0)[0] is False
+
+
+def test_verifier_check_tests_the_buzzlead_gateway_when_the_build_verifies_through_it(monkeypatch):
+    from app import sourcing_health as sh
+    from app.clients import gateway_verify
+    monkeypatch.setattr(gateway_verify, "enabled", lambda: True)
+    sh._verifier_cache.update(at=0.0, ok=True, text="")
+    monkeypatch.setattr(gateway_verify, "verify_many", lambda emails, providers=None: {"info@microsoft.com": {"status": "unknown", "steps": ["verify_mv_quality: info@microsoft.com: quality=bad"]}})
+    ok, text = sh.verifier_ok(0)
+    assert ok and "BuzzLead gateway" in text
+    sh._verifier_cache.update(at=0.0, ok=True, text="")
+    monkeypatch.setattr(gateway_verify, "verify_many", lambda emails, providers=None: {"info@microsoft.com": {"status": "unknown", "steps": ["verify_mv_quality: info@microsoft.com: quality="]}})
+    ok, text = sh.verifier_ok(0)
+    assert not ok and "empty quality" in text
