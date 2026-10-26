@@ -441,3 +441,29 @@ def test_a_sourcing_round_ends_with_a_forced_tier_pass_and_the_page_counts_searc
     assert "funnel.refresh(force=True)" in src and src.index("funnel.refresh(force=True)") > src.index("source_round=rnd")
     rsrc = inspect.getsource(runway.numbers)
     assert "f.tier = 1" in rsrc and "untiered" in rsrc          # the pool is companies the search can pick, not stored minus searched
+
+
+def test_sourcing_only_mode_stops_when_the_bank_is_full_and_never_loads_anything(monkeypatch):
+    from app import testrun
+    monkeypatch.setenv("SOURCING_ONLY", "true")
+    monkeypatch.setenv("SOURCING_TARGET", "50")
+    assert testrun.sourcing_only() is True and testrun.sourcing_target() == 50
+    monkeypatch.setattr(testrun, "_bank", lambda: 60)
+    monkeypatch.setattr(testrun, "_load", lambda: {})
+    assert testrun.ensure_running() == "done"                       # 60 ready contacts already meet a goal of 50
+    import inspect
+    src = inspect.getsource(testrun.run)
+    assert src.index("if only:") < src.index("materials_fill.run_pass()")     # the consumer branch is skipped in this mode
+
+
+def test_scorecard_report_is_plain_and_flags_unmeasured_cost(monkeypatch):
+    from app import sourcing_health as sh
+    monkeypatch.setattr(sh, "scorecard", lambda: dict(searched=1000, with_contacts=260, yield_pct=26.0, fit_failed=250, fit_failed_pct=25.0, contacts=420,
+                        contacts_per_company_with_contacts=1.6, contacts_per_company_searched=0.42, searched_last_hour=900, searched_last_24h=5000,
+                        gateway_skips_24h=120, bank=300, held=[("behind a blocked mail gateway", 12)], best_verticals=[{"vertical": "Steel", "yield_pct": 33.0}],
+                        weakest_verticals=[{"vertical": "Rail", "yield_pct": 12.0}], sent=2000, bounced=80, bounce_pct=4.0))
+    monkeypatch.setattr(sh, "providers", lambda: dict(keys={"email verification": ["MILLIONVERIFIER_API_KEY: set", "TRYKITT_API_KEY: MISSING"]},
+                        openrouter_balance=71.5, vendor_error_lines_last_hour=3, latest_vendor_error="stage4: 429 rate limit"))
+    out = sh.report()
+    assert "Gave at least one contact: 260 (26.0%)" in out and "Cost per contact: not measured" in out
+    assert "email verification: TRYKITT_API_KEY: MISSING" in out and "Bounce rate of what was sent: 4.0%" in out and "$71.5" in out

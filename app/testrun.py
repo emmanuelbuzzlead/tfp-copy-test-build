@@ -92,6 +92,14 @@ def _bank() -> int:
         return int(cur.fetchone()["n"])
 
 
+def sourcing_only() -> bool:
+    return os.getenv("SOURCING_ONLY", "").strip().lower() in ("1", "true", "yes")
+
+
+def sourcing_target() -> int:
+    return int(os.getenv("SOURCING_TARGET", "1000"))
+
+
 def _loaded() -> int:
     """Leads sitting in the angle campaigns (this database's own record of what the fill loaded)."""
     with db.cursor() as cur:
@@ -187,9 +195,12 @@ def run() -> dict:
 
     # MATERIALS_CAMPAIGN_ID set: the same producer keeps the bank full, but the consumer loads the OG-copy campaign (no research, no email writing)
     # instead of writing copy for the three angle campaigns. Goal and done flag are the campaign's own.
-    mat = materials_fill.enabled()
-    done_key = "materials_done" if mat else "done"
-    loaded_now = materials_fill.loaded if mat else _loaded
+    # SOURCING_ONLY=true: no consumer at all. The producer fills the bank to SOURCING_TARGET ready contacts and the job stops (Emmanuel, 2026-10-26: the
+    # sourcing stage should work for any client, with or without a copy stage attached).
+    only = sourcing_only()
+    mat = materials_fill.enabled() and not only
+    done_key = "sourcing_done" if only else ("materials_done" if mat else "done")
+    loaded_now = _bank if only else (materials_fill.loaded if mat else _loaded)
 
     holder = f"testrun-{int(time.time())}"
     if not _lock(holder):
@@ -197,21 +208,23 @@ def run() -> dict:
     try:
         prof = client.profile()
         fixed_target = int(os.getenv("SCALE_TARGET_LEADS", "4500"))
-        target_now = materials_fill.target if mat else (lambda: fixed_target)      # a Slack button can raise a campaign's goal mid-run
+        target_now = sourcing_target if only else (materials_fill.target if mat else (lambda: fixed_target))      # a Slack button can raise a campaign's goal mid-run
         target_total = target_now()
-        bank_cap = int(os.getenv("SCALE_BANK_CAP", "900"))
+        bank_cap = sourcing_target() if only else int(os.getenv("SCALE_BANK_CAP", "900"))
         min_batch = int(os.getenv("SCALE_MIN_BATCH", "60"))
         source_n = int(os.getenv("SCALE_SOURCE_N", "150"))
         deadline = time.time() + float(os.getenv("SCALE_MAX_HOURS", "20")) * 3600
         st = _load()
-        if (materials_fill.all_done() if mat else st.get(done_key)):
+        if (_bank() >= sourcing_target() if only else (materials_fill.all_done() if mat else st.get(done_key))):
             return {"status": "done"}
         st.setdefault("source_round", 1 if st.get("sourced") else 0)
         run_id = _run_id()
         db.start_run(run_id)
         stop = threading.Event()
         flags = {"supply_done": False}
-        if mat:
+        if only:
+            _say(f"{prof.display_name} sourcing started: goal {target_total:,} ready contacts in the bank, {_bank():,} there now. Nothing is loaded into any campaign and no copy is written.")
+        elif mat:
             _say(f"{prof.display_name} OG-copy fill started: goal {target_total} leads across campaign(s) {materials_fill.label()}, {loaded_now()} loaded so far, {_bank()} usable contacts banked. "
                  f"Contact finding keeps the bank full; each batch gets its COMPANY and MATERIALS_HAULED values and loads.")
         else:
@@ -267,6 +280,11 @@ def run() -> dict:
             if loaded >= target_now():
                 break
             bank = _bank()
+            if only:
+                if flags["supply_done"]:
+                    break
+                time.sleep(30)
+                continue
             if bank >= min_batch or (flags["supply_done"] and bank > 0):
                 out = materials_fill.run_pass() if mat else wave1_fill.fill()
                 if (out or {}).get("status") == "already_running":     # the 2-hourly resume holds the fill lock: wait, do not count it
@@ -304,7 +322,10 @@ def run() -> dict:
         final = loaded_now()
         _set(st, **{done_key: final >= target_total, "final_loaded": final})
         _save(st)
-        _say(f"scale-up {'reached the goal' if st[done_key] else 'stopped'}: {final} of {target_total} leads loaded into the draft campaign(s). No senders attached; nothing sends.")
+        if only:
+            _say(f"sourcing {'reached the goal' if st[done_key] else 'stopped'}: {final:,} of {target_total:,} ready contacts in the bank.")
+        else:
+            _say(f"scale-up {'reached the goal' if st[done_key] else 'stopped'}: {final} of {target_total} leads loaded into the draft campaign(s). No senders attached; nothing sends.")
         return {"status": "done" if st[done_key] else "stopped", "state": st}
     finally:
         _release(holder)
@@ -336,7 +357,7 @@ def ensure_running() -> str:
     except Exception:
         return "state unreadable"
     from . import materials_fill
-    if (materials_fill.all_done() if materials_fill.enabled() else st.get("done")):
+    if (_bank() >= sourcing_target() if sourcing_only() else (materials_fill.all_done() if materials_fill.enabled() else st.get("done"))):
         return "done"
     _thread = threading.Thread(target=run_safe, daemon=True)
     _thread.start()

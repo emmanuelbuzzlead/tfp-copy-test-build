@@ -130,7 +130,7 @@ def _require_upload_token(authorization: str | None) -> None:
 _LAZY_IMPORTS = [
     "app.testgrid", "app.company_fit", "app.cost_tests", "app.scaling",
     "app.wave1_fill", "app.clients.leadocean", "app.modes", "app.report",
-    "app.taxonomy", "app.stages.s7_push", "app.stages.s8_review", "app.runner", "app.nightly", "app.angle_derivation", "app.scale_review", "app.materials_fill",
+    "app.taxonomy", "app.stages.s7_push", "app.stages.s8_review", "app.runner", "app.nightly", "app.angle_derivation", "app.scale_review", "app.materials_fill", "app.sourcing_health",
 ]
 
 _HEALTH_TABLES = [
@@ -150,6 +150,16 @@ def runway_page() -> HTMLResponse:
         return HTMLResponse(page.page_html())
     except Exception as exc:
         return HTMLResponse(f"<pre>runway unavailable: {exc}</pre>", status_code=500)
+
+
+@app.get("/scorecard", response_class=PlainTextResponse)
+def sourcing_scorecard() -> PlainTextResponse:
+    """Is sourcing working well? Yield, fit rate, speed, held reasons, bounce rate and provider health (app/sourcing_health.py). Read-only."""
+    try:
+        from . import sourcing_health
+        return PlainTextResponse(sourcing_health.report())
+    except Exception as exc:
+        return PlainTextResponse(f"scorecard unavailable: {exc}", status_code=500)
 
 
 @app.get("/runway.txt", response_class=PlainTextResponse)
