@@ -140,16 +140,20 @@ def _source_round(prof, st: dict, n: int) -> int:
     from . import modes
     before = _staged()
     rnd = st.get("source_round", 0) + 1
-    _say(f"sourcing round {rnd}: about {n} contacts' worth of NEW companies for each of {len(prof.verticals)} verticals.")
-    for i, v in enumerate(prof.verticals, 1):
+    # Priority verticals only, each at SCALE_PRIORITY_BOOST times the normal size (Emmanuel, 2026-10-26: manufacturing and construction first, in volume).
+    boost = int(os.getenv("SCALE_PRIORITY_BOOST", "4"))
+    plan = [(v, n * boost) for v in prof.priority_verticals] if prof.priority_verticals else [(v, n) for v in prof.verticals]
+    _say(f"sourcing round {rnd}: about {plan[0][1] if plan else n} contacts' worth of NEW companies for each of {len(plan)} "
+         f"{'priority ' if prof.priority_verticals else ''}verticals.")
+    for i, (v, vn) in enumerate(plan, 1):
         try:
-            modes.run_source(prof, v, n, companies_only=True)
+            modes.run_source(prof, v, vn, companies_only=True)
         except Exception as exc:
             with _st_lock:
                 st.setdefault("errors", []).append(f"{v}: {str(exc)[:120]}")
         _save(st)
         if i % 6 == 0:
-            _say(f"  sourcing {i}/{len(prof.verticals)} verticals, {_staged() - before} new companies so far.")
+            _say(f"  sourcing {i}/{len(plan)} verticals, {_staged() - before} new companies so far.")
     _set(st, source_round=rnd)
     # Every run_source call tiers new companies, but funnel.refresh skips itself inside a five-minute window, so companies staged late in a round never got a
     # tier row and the contact search could not see them: 10,792 of 14,881 stored companies on 2026-10-22. One forced pass closes the round.

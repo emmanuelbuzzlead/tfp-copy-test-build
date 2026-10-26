@@ -93,6 +93,8 @@ class Profile:
     # The client's OWN audiences, in their priority order. Used before
     # anything is inferred from the ICP.
     verticals: tuple[str, ...] = field(default=())
+    # Verticals searched first and sourced in volume (a subset of `verticals`); empty means no preference.
+    priority_verticals: tuple[str, ...] = field(default=())
     # Countries to source companies and keep contacts in (ISO2). Default US only; TFP is US and Canada (Emmanuel, 2026-10-15).
     countries: tuple[str, ...] = field(default=("US",))
     # Optional cheap first-pass fit judge (e.g. "openai/gpt-oss-120b" via BuzzLead). It only REJECTS; every company it passes is confirmed by the
@@ -414,6 +416,7 @@ def load(name: str | None = None) -> Profile:
         database=cfg.get("database"),
         slack_channel=cfg.get("slack_channel"),
         verticals=tuple(cfg.get("verticals") or ()),
+        priority_verticals=tuple(cfg.get("priority_verticals") or ()),
         countries=tuple(str(c).upper() for c in (cfg.get("countries") or ["US"])),
         fit_screen_model=cfg.get("fit_screen_model") or None,
         fit_screen_only=bool(cfg.get("fit_screen_only", False)),

@@ -93,6 +93,19 @@ research_search_queries = [
 
 # TFP verticals, declared (Emmanuel, 2026-10-15: any vertical that ships with flatbeds is fair game; warehousing, construction and
 # defense are open). Labels are QuickEnrich industry names; Lead Ocean uses the same names. The fit gate judges each company's own site.
+# Emmanuel, 2026-10-26: no more sourcing in Maritime and Rail, and manufacturing and construction come first, in volume. Priority verticals are searched
+# first and get SCALE_PRIORITY_BOOST times the sourcing; the others keep their stored companies but are not sourced further.
+priority_verticals = [
+    "General Manufacturing and Industrial Products",
+    "Machinery and Equipment Manufacturing",
+    "Steel, Metals and Metal Fabrication",
+    "Automotive and Transportation Equipment",
+    "Defense and Aerospace Manufacturing",
+    "Consumer and Medical Products Manufacturing",
+    "Construction and Infrastructure",
+    "Building Materials and Products",
+]
+
 verticals = [
     "Steel, Metals and Metal Fabrication",
     "Machinery and Equipment Manufacturing",
@@ -101,7 +114,6 @@ verticals = [
     "Automotive and Transportation Equipment",
     "Trucking and Freight Carriers",
     "Logistics, Warehousing and 3PL",
-    "Maritime and Rail",
     "Wholesale and Distribution",
     "Construction and Infrastructure",
     "Defense and Aerospace Manufacturing",

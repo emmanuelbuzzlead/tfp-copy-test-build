@@ -32,7 +32,13 @@ def pick_companies(verticals: list[str], n: int) -> list[dict]:
                ORDER BY s.domain""", (verticals,))
         rows = cur.fetchall()
     rank = {"MAKER": 0, None: 1, "UNKNOWN": 1, "NO_SITE": 2}
-    rows.sort(key=lambda r: (rank.get((r["payload"] or {}).get("_site_fit"), 1),
+    try:
+        from . import client
+        priority = set(client.profile().priority_verticals)
+    except Exception:
+        priority = set()
+    rows.sort(key=lambda r: (0 if r["vertical"] in priority else 1,          # priority verticals first (manufacturing and construction, 2026-10-26)
+                             rank.get((r["payload"] or {}).get("_site_fit"), 1),
                              hash(r["domain"]) % 100000))
     out = []
     for r in rows[:n]:

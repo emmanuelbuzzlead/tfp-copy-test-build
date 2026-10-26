@@ -12,7 +12,7 @@ def test_profile_is_tfp_with_the_agreed_firmographics():
     assert p.employee_min == 100 and p.countries == ("US", "CA") and p.contacts_per_company == 5
     assert p.reuse_fit_check is True          # TFP fit-checks every company: no detach in EmailBison
     assert [c[0] for c in p.copy_variants] == ANGLES
-    assert len(p.verticals) == 17 and "Construction and Infrastructure" in p.verticals and "Defense and Aerospace Manufacturing" in p.verticals
+    assert len(p.verticals) == 16 and "Construction and Infrastructure" in p.verticals and "Defense and Aerospace Manufacturing" in p.verticals
 
 
 @pytest.mark.parametrize("angle", ANGLES)
@@ -692,3 +692,31 @@ def test_the_slow_scale_tick_can_be_switched_off(monkeypatch):
     import inspect
     from app import runner
     assert "DISABLE_SCALE_TICK" in inspect.getsource(runner._tick_copy_test_scaling)
+
+
+def test_maritime_is_out_and_manufacturing_and_construction_are_priorities():
+    from app import client
+    p = client.profile()
+    assert "Maritime and Rail" not in p.verticals and len(p.verticals) == 16
+    assert set(p.priority_verticals) <= set(p.verticals) and "Construction and Infrastructure" in p.priority_verticals
+    assert "General Manufacturing and Industrial Products" in p.priority_verticals and "Maritime and Rail" not in p.priority_verticals
+
+
+def test_priority_verticals_are_searched_first_and_sourced_in_volume(monkeypatch):
+    import inspect
+    from app import scaling, testrun
+    assert "priority" in inspect.getsource(scaling.pick_companies) and "SCALE_PRIORITY_BOOST" in inspect.getsource(testrun._source_round)
+    calls = []
+    from app import modes
+    monkeypatch.setattr(modes, "run_source", lambda prof, v, n, companies_only=False: calls.append((v, n)))
+    monkeypatch.setattr(testrun, "_staged", lambda: 0)
+    monkeypatch.setattr(testrun, "_say", lambda t: None)
+    monkeypatch.setattr(testrun, "_save", lambda st: None)
+    from app import funnel
+    monkeypatch.setattr(funnel, "refresh", lambda *a, **k: {})
+    class Prof:
+        priority_verticals = ("Construction and Infrastructure", "Machinery and Equipment Manufacturing")
+        verticals = ("Construction and Infrastructure", "Machinery and Equipment Manufacturing", "Trucking and Freight Carriers")
+    monkeypatch.setenv("SCALE_PRIORITY_BOOST", "4")
+    testrun._source_round(Prof, {}, 150)
+    assert calls == [("Construction and Infrastructure", 600), ("Machinery and Equipment Manufacturing", 600)]    # trucking is not sourced further

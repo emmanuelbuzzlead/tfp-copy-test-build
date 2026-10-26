@@ -10,7 +10,7 @@ A10 = "Peer Proof"
 [segments]
 Manufacturing = ["Steel, Metals and Metal Fabrication", "Machinery and Equipment Manufacturing", "General Manufacturing and Industrial Products", "Automotive and Transportation Equipment", "Defense and Aerospace Manufacturing", "Consumer and Medical Products Manufacturing"]
 Materials     = ["Building Materials and Products", "Construction and Infrastructure", "Mining, Oil, Gas and Utilities"]
-Logistics     = ["Trucking and Freight Carriers", "Logistics, Warehousing and 3PL", "Maritime and Rail", "Wholesale and Distribution"]
+Logistics     = ["Trucking and Freight Carriers", "Logistics, Warehousing and 3PL", "Wholesale and Distribution"]
 Resources     = ["Food and Beverage Production", "Agriculture and Forestry", "Equipment Rental, Recycling and Waste"]
 Other         = ["Other Industrial Shippers"]
 Tier2         = ["Tier 2 - previously emailed"]
