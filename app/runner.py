@@ -521,6 +521,10 @@ def _tick_copy_test_scaling() -> None:
     stuck general-pipeline run can structurally never block copy-test scaling again,
     no matter how long it runs or what it gets stuck on.
     """
+    if os.environ.get("DISABLE_SCALE_TICK", "").strip().lower() in ("1", "true", "yes"):
+        # Emmanuel, 2026-10-26: the angle campaigns are topped up by the scale-up job (producer fills the bank, wave1_fill writes copy and loads), several times
+        # faster than this tick's one feed_campaign call. Running both would feed the same campaign twice.
+        return
     with db.cursor() as cur:
         cur.execute("""CREATE TABLE IF NOT EXISTS job_locks (name TEXT PRIMARY KEY, holder TEXT,
                        heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now())""")

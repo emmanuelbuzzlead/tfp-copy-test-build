@@ -662,3 +662,33 @@ def test_verifier_check_tests_the_buzzlead_gateway_when_the_build_verifies_throu
     monkeypatch.setattr(gateway_verify, "verify_many", lambda emails, providers=None: {"info@microsoft.com": {"status": "unknown", "steps": ["verify_mv_quality: info@microsoft.com: quality="]}})
     ok, text = sh.verifier_ok(0)
     assert not ok and "empty quality" in text
+
+
+def test_the_job_has_work_while_a_fill_campaign_or_an_angle_is_short_of_its_goal(monkeypatch):
+    from app import materials_fill, testrun, wave1_fill
+    monkeypatch.delenv("SOURCING_ONLY", raising=False)
+    monkeypatch.setattr(materials_fill, "enabled", lambda: True)
+    state = {"all_done": True, "angle_left": 0}
+    monkeypatch.setattr(materials_fill, "all_done", lambda: state["all_done"])
+    monkeypatch.setattr(testrun, "_angle_left", lambda: state["angle_left"])
+    assert testrun.work_left() is False                         # 2174 is at its goal and the angles are at theirs
+    state["angle_left"] = 1600
+    assert testrun.work_left() is True                          # A7 or A10 was topped up
+    state.update(angle_left=0, all_done=False)
+    assert testrun.work_left() is True                          # a fill campaign was topped up
+
+
+def test_angle_left_reads_the_scale_targets_and_respects_the_hold(monkeypatch):
+    from app import testrun, wave1_fill
+    monkeypatch.setattr(wave1_fill, "_held", lambda: False)
+    monkeypatch.setattr(wave1_fill, "_setup", lambda: ({}, {"A7": "a7", "A10": "a10", "A5": "a5"}, {"A7": 1, "A10": 2, "A5": 3}, {"A7": 3500, "A10": 3500, "A5": 1500}))
+    monkeypatch.setattr(wave1_fill, "counts", lambda campaign_of: {"A7": 1914, "A10": 2373, "A5": 1547})
+    assert testrun._angle_left() == (3500 - 1914) + (3500 - 2373)         # A5 is past its goal and adds nothing
+    monkeypatch.setattr(wave1_fill, "_held", lambda: True)
+    assert testrun._angle_left() == 0
+
+
+def test_the_slow_scale_tick_can_be_switched_off(monkeypatch):
+    import inspect
+    from app import runner
+    assert "DISABLE_SCALE_TICK" in inspect.getsource(runner._tick_copy_test_scaling)

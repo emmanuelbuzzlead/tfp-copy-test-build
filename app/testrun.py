@@ -92,6 +92,28 @@ def _bank() -> int:
         return int(cur.fetchone()["n"])
 
 
+def _angle_left() -> int:
+    """Leads the copy-test angle campaigns still need to reach their goals (the goal is scale_targets when an angle has one, else the flat fill target)."""
+    from . import wave1_fill
+    if wave1_fill._held():
+        return 0
+    s = wave1_fill._setup()
+    if not s:
+        return 0
+    _cfg, angles, campaign_of, targets = s
+    have = wave1_fill.counts(campaign_of)
+    return sum(max(targets[a] - have[a], 0) for a in angles)
+
+
+def work_left() -> bool:
+    """Is there anything for the job to do? A fill campaign short of its goal, or an angle campaign short of its goal (or, in sourcing-only mode, a bank short of
+    its target). Both consumers can be active at once (Emmanuel, 2026-10-26: top up the winning angles while 2174 keeps its own goal)."""
+    from . import materials_fill
+    if sourcing_only():
+        return _bank() < sourcing_target()
+    return (materials_fill.enabled() and not materials_fill.all_done()) or _angle_left() > 0
+
+
 def sourcing_only() -> bool:
     return os.getenv("SOURCING_ONLY", "").strip().lower() in ("1", "true", "yes")
 
@@ -255,8 +277,13 @@ def run() -> dict:
     # sourcing stage should work for any client, with or without a copy stage attached).
     only = sourcing_only()
     mat = materials_fill.enabled() and not only
+    angles_on = (not only) and not wave1_fill._held()
     done_key = "sourcing_done" if only else ("materials_done" if mat else "done")
-    loaded_now = _bank if only else (materials_fill.loaded if mat else _loaded)
+
+    def loaded_now() -> int:
+        if only:
+            return _bank()
+        return (materials_fill.loaded() if mat else 0) + (_loaded() if angles_on else 0)
 
     holder = f"testrun-{int(time.time())}"
     if not _lock(holder):
@@ -264,14 +291,18 @@ def run() -> dict:
     try:
         prof = client.profile()
         fixed_target = int(os.getenv("SCALE_TARGET_LEADS", "4500"))
-        target_now = sourcing_target if only else (materials_fill.target if mat else (lambda: fixed_target))      # a Slack button can raise a campaign's goal mid-run
+
+        def target_now() -> int:                    # for the progress lines only; a Slack or page button can raise a goal mid-run
+            if only:
+                return sourcing_target()
+            return (materials_fill.target() if mat else 0) + (loaded_now() + _angle_left() if angles_on else 0)
         target_total = target_now()
         bank_cap = sourcing_target() if only else int(os.getenv("SCALE_BANK_CAP", "900"))
         min_batch = int(os.getenv("SCALE_MIN_BATCH", "60"))
         source_n = int(os.getenv("SCALE_SOURCE_N", "150"))
         deadline = time.time() + float(os.getenv("SCALE_MAX_HOURS", "20")) * 3600
         st = _load()
-        if (_bank() >= sourcing_target() if only else (materials_fill.all_done() if mat else st.get(done_key))):
+        if not work_left():
             return {"status": "done"}
         st.setdefault("source_round", 1 if st.get("sourced") else 0)
         run_id = _run_id()
@@ -280,9 +311,10 @@ def run() -> dict:
         flags = {"supply_done": False}
         if only:
             _say(f"{prof.display_name} sourcing started: goal {target_total:,} ready contacts in the bank, {_bank():,} there now. Nothing is loaded into any campaign and no copy is written.")
-        elif mat:
-            _say(f"{prof.display_name} OG-copy fill started: goal {target_total} leads across campaign(s) {materials_fill.label()}, {loaded_now()} loaded so far, {_bank()} usable contacts banked. "
-                 f"Contact finding keeps the bank full; each batch gets its COMPANY and MATERIALS_HAULED values and loads.")
+        elif mat or angles_on:
+            _say(f"{prof.display_name} fill started: " + (f"fill campaign(s) {materials_fill.label()}" if mat else "")
+                 + (" and " if mat and angles_on else "") + (f"{_angle_left():,} more leads wanted across the copy-test angles" if angles_on else "")
+                 + f". {_bank()} usable contacts banked. Contact finding keeps the bank full; each batch loads with its merge values or its written copy.")
         else:
             _say(f"{prof.display_name} scale-up started: goal {target_total} leads across the draft campaigns, {_loaded()} loaded so far, {_bank()} usable contacts banked. "
                  f"Contact finding and copy now run side by side.")
@@ -296,7 +328,7 @@ def run() -> dict:
 
         def producer() -> None:
             try:
-                while not stop.is_set() and time.time() < deadline and loaded_now() < target_now():
+                while not stop.is_set() and time.time() < deadline and work_left():
                     if _bank() >= bank_cap or _paused():
                         time.sleep(20)
                         continue
@@ -336,7 +368,7 @@ def run() -> dict:
         while time.time() < deadline:
             _beat(holder)
             loaded = loaded_now()
-            if loaded >= target_now():
+            if not work_left():
                 break
             bank = _bank()
             if only:
@@ -345,8 +377,13 @@ def run() -> dict:
                 time.sleep(30)
                 continue
             if bank >= min_batch or (flags["supply_done"] and bank > 0):
-                out = materials_fill.run_pass() if mat else wave1_fill.fill()
-                if (out or {}).get("status") == "already_running":     # the 2-hourly resume holds the fill lock: wait, do not count it
+                out, other = None, None
+                if mat and not materials_fill.all_done():
+                    out = materials_fill.run_pass()
+                if angles_on and _angle_left() > 0:
+                    other = wave1_fill.fill()
+                    out = out or other
+                if out is None or (out or {}).get("status") == "already_running":     # the 2-hourly resume holds the fill lock: wait, do not count it
                     time.sleep(60)
                     continue
                 now = loaded_now()
@@ -355,7 +392,7 @@ def run() -> dict:
                 _save(st)
                 try:
                     from . import runway
-                    if mat:
+                    if mat and other is None:
                         _say(f"load cycle {st.get('cycles')} done: +{now - loaded}, {now:,} of {target_now():,} across campaign(s) {materials_fill.label()}. Held this pass: "
                              f"{(out or {}).get('held_unclear', 0)} unclear, {(out or {}).get('held_standard', 0)} failed the field standards. Bank {_bank():,}.\n"
                              "Samples (company | hauls): " + "; ".join(f"{a} | {b}" for a, b in ((out or {}).get("samples") or [])[:6]))
@@ -379,7 +416,7 @@ def run() -> dict:
             w.join(timeout=60)
         target_total = target_now()
         final = loaded_now()
-        _set(st, **{done_key: final >= target_total, "final_loaded": final})
+        _set(st, **{done_key: not work_left(), "final_loaded": final})
         _save(st)
         if only:
             _say(f"sourcing {'reached the goal' if st[done_key] else 'stopped'}: {final:,} of {target_total:,} ready contacts in the bank.")
@@ -416,7 +453,7 @@ def ensure_running() -> str:
     except Exception:
         return "state unreadable"
     from . import materials_fill
-    if (_bank() >= sourcing_target() if sourcing_only() else (materials_fill.all_done() if materials_fill.enabled() else st.get("done"))):
+    if not work_left():
         return "done"
     _thread = threading.Thread(target=run_safe, daemon=True)
     _thread.start()

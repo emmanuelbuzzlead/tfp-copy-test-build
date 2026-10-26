@@ -470,7 +470,8 @@ def add_leads(cid: int, n: int, user: str | None = None) -> dict:
         res = testgrid.auto_expand_champion(ang["angle"], None, target_leads=new_target)
         db.log(None, "materials_fill", f"add_leads: angle {ang['angle']} (campaign {cid}) {ang['loaded']} -> {new_target} (+{n}) by {user or 'unknown'}: {res}")
         if res.get("target_set"):
-            _nudge_angles()
+            _nudge()                                  # the scale-up job fills the angle goal from the bank
+            _nudge_angles()                           # a no-op when DISABLE_SCALE_TICK is on
         return {"ok": bool(res.get("target_set")), "campaign": cid, "was": ang["loaded"], "target": new_target, "added": n,
                 "reason": res.get("reason", "nothing changed"),
                 "note": f"{ang['angle']} is a copy-test angle: copy is written for each lead and the scale-up runs every 2 hours, so it is slower than a fill campaign. "
