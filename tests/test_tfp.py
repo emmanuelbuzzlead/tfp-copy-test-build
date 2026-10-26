@@ -514,3 +514,30 @@ def test_a_single_interested_reply_never_decides_the_test_or_pauses_anyone(monke
     tie["A10"].update(interested=3, positive=3)
     v = testgrid.decide(tie, launched, cfg, now)
     assert v["status"] == "decided" and v["winner"] == "A10"
+
+
+def test_add_leads_raises_the_goal_by_the_amount_pressed_and_is_capped(monkeypatch):
+    from app import materials_fill as mf, runway, testrun
+    raised = {}
+    monkeypatch.setattr(mf, "specs", lambda: [{"campaign": 2174, "target": 2100, "materials": False}])
+    monkeypatch.setattr(mf, "loaded", lambda cid=None: 2103)
+    monkeypatch.setattr(mf, "raise_target", lambda cid, t: raised.update({cid: t}))
+    monkeypatch.setattr(mf, "_nudge", lambda: None)
+    monkeypatch.setattr(mf.db, "log", lambda *a, **k: None)
+    monkeypatch.setattr(testrun, "_bank", lambda: 40)
+    monkeypatch.setattr(runway, "numbers", lambda: {"left": 8000})
+    r = mf.add_leads(2174, 500, "emmanuel")
+    assert r["ok"] and r["target"] == 2603 and raised == {2174: 2603} and "8,000 companies" in r["note"]
+    assert not mf.add_leads(2174, 5000)["ok"] and not mf.add_leads(2174, 0)["ok"]
+    assert "not a fill campaign" in mf.add_leads(9999, 100)["reason"]
+
+
+def test_slack_add_leads_button_and_commands_are_wired():
+    from app import materials_fill as mf, web
+    from app.stages import s6_approval
+    kind, command, user = web.interaction_to_command({"type": "block_actions", "user": {"username": "e"}, "actions": [{"action_id": "add_leads_500", "value": "2174|500"}]})
+    assert kind == "add_leads" and command == "2174|500"
+    import inspect
+    src = inspect.getsource(s6_approval.handle_command)
+    assert 'action in ("campaigns", "controls")' in src and 'action == "add"' in src and 'action == "register"' in src
+    assert "confirm" in inspect.getsource(mf.controls_blocks)             # every button asks "are you sure" first

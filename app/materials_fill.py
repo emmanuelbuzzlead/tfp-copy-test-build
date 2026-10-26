@@ -44,16 +44,20 @@ def specs() -> list[dict]:
         legacy = os.getenv("MATERIALS_CAMPAIGN_ID", "").strip()
         if legacy.isdigit() and int(legacy) > 0:
             out.append({"campaign": int(legacy), "target": int(os.getenv("MATERIALS_TARGET", "3500")), "materials": needs_materials()})
-    if out:
-        try:
-            ensure_tables()
-            with db.cursor() as cur:
-                cur.execute("SELECT campaign_id, target FROM fill_targets")
-                raised = {int(r["campaign_id"]): int(r["target"]) for r in cur.fetchall()}
-            for sp in out:
-                sp["target"] = max(sp["target"], raised.get(sp["campaign"], 0))
-        except Exception:
-            pass
+    try:
+        ensure_tables()
+        with db.cursor() as cur:
+            # Campaigns registered from Slack (`register <campaign> <target> company|materials`), so adding one needs no setting and no deploy.
+            cur.execute("SELECT campaign_id, target, materials FROM fill_campaigns ORDER BY added_at")
+            for r in cur.fetchall():
+                if int(r["campaign_id"]) not in {x["campaign"] for x in out}:
+                    out.append({"campaign": int(r["campaign_id"]), "target": int(r["target"]), "materials": bool(r["materials"])})
+            cur.execute("SELECT campaign_id, target FROM fill_targets")
+            raised = {int(r["campaign_id"]): int(r["target"]) for r in cur.fetchall()}
+        for sp in out:
+            sp["target"] = max(sp["target"], raised.get(sp["campaign"], 0))
+    except Exception:
+        pass
     return out
 
 
@@ -102,6 +106,8 @@ def ensure_tables() -> None:
     with db.cursor() as cur:
         cur.execute("ALTER TABLE contacts ADD COLUMN IF NOT EXISTS materials_hauled TEXT")
         cur.execute("""CREATE TABLE IF NOT EXISTS fill_targets (campaign_id BIGINT PRIMARY KEY, target INTEGER NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())""")
+        cur.execute("""CREATE TABLE IF NOT EXISTS fill_campaigns (campaign_id BIGINT PRIMARY KEY, target INTEGER NOT NULL, materials BOOLEAN NOT NULL DEFAULT FALSE,
+            added_by TEXT, added_at TIMESTAMPTZ NOT NULL DEFAULT now())""")
         cur.execute("""CREATE TABLE IF NOT EXISTS materials_cache (
             domain TEXT PRIMARY KEY, phrase TEXT, status TEXT NOT NULL, model TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())""")
 
@@ -338,3 +344,72 @@ def status() -> list[dict] | None:
             pass
         out.append({"campaign": cid, "target": x["target"], "loaded": loaded(cid), **{k: int(v or 0) for k, v in row.items()}, **live})
     return out
+
+
+MAX_ADD = int(os.getenv("MAX_ADD_LEADS", "2000"))
+
+
+def register(cid: int, target_leads: int, materials: bool = False, user: str | None = None) -> dict:
+    """Start filling another campaign. The campaign must exist in this client's EmailBison workspace."""
+    from .clients import emailbison
+    camp = emailbison.get_campaign(cid) or {}
+    if not camp.get("id") and not camp.get("name"):
+        return {"ok": False, "reason": f"campaign {cid} was not found in this client's EmailBison workspace"}
+    ensure_tables()
+    with db.cursor() as cur:
+        cur.execute("""INSERT INTO fill_campaigns (campaign_id, target, materials, added_by) VALUES (%s,%s,%s,%s)
+                       ON CONFLICT (campaign_id) DO UPDATE SET target = EXCLUDED.target, materials = EXCLUDED.materials""", (cid, target_leads, materials, user))
+    _nudge()
+    return {"ok": True, "campaign": cid, "name": camp.get("name"), "target": target_leads, "loaded": int(camp.get("total_leads") or 0), "materials": materials}
+
+
+def _nudge() -> None:
+    """Wake the scale-up job now instead of waiting for its five-minute watchdog."""
+    try:
+        from . import testrun
+        testrun.ensure_running()
+    except Exception:
+        pass
+
+
+def add_leads(cid: int, n: int, user: str | None = None) -> dict:
+    """The button: add n more leads to a campaign this fill loads. The goal becomes what is in the campaign now plus n; the job picks it up and the
+    producer finds the contacts. Capped per press (MAX_ADD_LEADS, default 2,000)."""
+    n = int(n)
+    if n <= 0 or n > MAX_ADD:
+        return {"ok": False, "reason": f"pick between 1 and {MAX_ADD:,} leads"}
+    sp = next((x for x in specs() if x["campaign"] == cid), None)
+    if not sp:
+        return {"ok": False, "reason": f"campaign {cid} is not a fill campaign here. Register it first with `register {cid} <target> company`"}
+    now = loaded(cid)
+    new_target = max(sp["target"], now + n)
+    raise_target(cid, new_target)
+    note = ""
+    try:
+        from . import runway, testrun
+        ready = testrun._bank()
+        pool = runway.numbers()["left"]
+        note = f"{ready:,} contacts are ready now and {pool:,} companies are still searchable (about 0.4 contacts each)."
+    except Exception:
+        pass
+    db.log(None, "materials_fill", f"add_leads: campaign {cid} {now} -> {new_target} (+{n}) by {user or 'unknown'}")
+    _nudge()
+    return {"ok": True, "campaign": cid, "was": now, "target": new_target, "added": n, "note": note}
+
+
+def controls_blocks() -> list[dict]:
+    """A Slack message: each fill campaign with its progress and +500 / +1,000 buttons (each asks 'are you sure' first)."""
+    blocks: list[dict] = []
+    for c in (status() or []):
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*{c.get('name') or 'Campaign'}* (campaign {c['campaign']}): {c['loaded']:,} of {c['target']:,} loaded"
+                       + (f", {c['sent']:,} sent, {c['interested']} interested" if c.get("sent") else ", nothing sent yet")}})
+        elements = []
+        for n in (500, 1000):
+            elements.append({"type": "button", "text": {"type": "plain_text", "text": f"Add {n:,} leads"}, "action_id": f"add_leads_{n}", "value": f"{c['campaign']}|{n}",
+                             "confirm": {"title": {"type": "plain_text", "text": f"Add {n:,} leads?"},
+                                         "text": {"type": "mrkdwn", "text": f"Raises campaign {c['campaign']}'s goal to {c['loaded'] + n:,} and starts finding contacts. It spends contact search and verification credits."},
+                                         "confirm": {"type": "plain_text", "text": "Add them"}, "deny": {"type": "plain_text", "text": "Cancel"}}})
+        blocks.append({"type": "actions", "elements": elements})
+    if not blocks:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "No fill campaigns yet. Add one with `register <campaign id> <target> company|materials`."}})
+    return blocks

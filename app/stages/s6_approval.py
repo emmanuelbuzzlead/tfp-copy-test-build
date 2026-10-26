@@ -606,6 +606,8 @@ HELP = """*Everything `/ve` does.*
 • `/ve brief` — plain-English: what just ran, which vendors are out, whether the
   last two-hourly check added anything (and why not), and the biggest lever right now
 • `/ve deploycheck` — is anything running that a deploy would kill right now?
+• `/ve campaigns` — each fill campaign with progress and Add 500 / Add 1,000 buttons
+• `/ve add 500 to 2174` — add leads to a fill campaign; `/ve register 2190 1500 company` starts filling another
 • `/ve progress <client>` — is that client's run alive, and where is it
 • `/ve show <number>|all` — the copy for a batch, before you approve it
 
@@ -918,6 +920,31 @@ def handle_command(text: str, user: str) -> str | dict:
         # /<command> runway -- the compact one-screen count of leads, contacts, companies and what is left (app/runway.py)
         from .. import runway
         return runway.report()
+
+    if action in ("campaigns", "controls"):
+        # /<command> campaigns -- each fill campaign with its progress and Add 500 / Add 1,000 buttons (app/materials_fill.py)
+        from .. import materials_fill
+        return {"text": "Fill campaigns", "blocks": materials_fill.controls_blocks()}
+
+    if action == "add":
+        # /<command> add 500 to 2174
+        from .. import materials_fill
+        digits = [p for p in parts[1:] if p.isdigit()]
+        if len(digits) != 2:
+            return "Usage: `/<command> add <number of leads> to <campaign id>`, for example `add 500 to 2174`."
+        n, cid = int(digits[0]), int(digits[1])
+        r = materials_fill.add_leads(cid, n, user)
+        return (f"Adding {r['added']:,} leads to campaign {r['campaign']}: it holds {r['was']:,}, the goal is now {r['target']:,}. {r['note']}" if r.get("ok") else r["reason"])
+
+    if action == "register":
+        # /<command> register 2190 1500 company|materials -- start filling another campaign, no deploy needed
+        from .. import materials_fill
+        digits = [p for p in parts[1:] if p.isdigit()]
+        if len(digits) != 2:
+            return "Usage: `/<command> register <campaign id> <target leads> company|materials`."
+        r = materials_fill.register(int(digits[0]), int(digits[1]), materials=("materials" in [p.lower() for p in parts[1:]]), user=user)
+        return (f"Registered *{r['name']}* (campaign {r['campaign']}): {r['loaded']:,} loaded, goal {r['target']:,}, "
+                f"{'with materials hauled' if r['materials'] else 'company name only'}. Loading starts now." if r.get("ok") else r["reason"])
 
     if action == "status":
         from datetime import datetime, timezone

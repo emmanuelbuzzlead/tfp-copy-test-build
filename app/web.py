@@ -435,6 +435,8 @@ def interaction_to_command(payload: dict) -> tuple[str, str | None, str | None]:
             return "scale_lookalike", batch_id, user
         if (action.get("action_id") or "").startswith("scale_review_"):
             return "scale_review", batch_id, user
+        if (action.get("action_id") or "").startswith("add_leads_"):
+            return "add_leads", batch_id, user
         if (action.get("action_id") or "").startswith("launch_lookalike"):
             return "launch_lookalike", batch_id, user
         return "ignore", None, user
@@ -484,6 +486,26 @@ async def slack_interact(request: Request) -> JSONResponse:
         threading.Thread(target=slack.open_kill_modal,
                          args=(payload.get("trigger_id"), command, response_url),
                          daemon=True).start()
+        return JSONResponse({})
+
+    if kind == "add_leads":
+        response_url = payload.get("response_url")
+        cid, _, n = command.partition("|")
+
+        def _add() -> None:
+            from . import materials_fill
+            try:
+                r = materials_fill.add_leads(int(cid), int(n), user)
+                text = (f":heavy_plus_sign: Adding {r['added']:,} leads to campaign {r['campaign']}: it holds {r['was']:,}, the goal is now {r['target']:,}. {r['note']} _(by {user})_"
+                        if r.get("ok") else f"Campaign {cid}: {r['reason']}  _(by {user})_")
+            except Exception as exc:
+                text = f"Could not add leads to campaign {cid}: {exc}  _(by {user})_"
+            if response_url:
+                slack.respond(response_url, text)
+            else:
+                slack.post(text)
+
+        threading.Thread(target=_add, daemon=True).start()
         return JSONResponse({})
 
     if kind == "scale_review":
