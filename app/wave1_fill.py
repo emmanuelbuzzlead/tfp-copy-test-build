@@ -132,6 +132,12 @@ def _release(holder: str) -> None:
         cur.execute("DELETE FROM job_locks WHERE name=%s AND holder=%s", (LOCK, holder))
 
 
+def _assign(domain: str, open_angles: list) -> str:
+    """The angle a company's contacts go to: a stable hash of the company over the angles that still need leads, so one company never splits across angles
+    and a finished angle never takes a share."""
+    return open_angles[int(hashlib.sha256(f"wave1:{domain}".encode()).hexdigest(), 16) % len(open_angles)]
+
+
 def _targets_for(angles: dict, base_target: int) -> dict:
     """Troy, 2026-10-09: "tiered leads... should be the bulk of our sourcing." The flat
     [fill] target used to apply to every angle alike, including a decided winner with a
@@ -474,6 +480,10 @@ def fill(post: bool = True) -> dict:
 
         from . import client
         recontact_days = client.profile().recontact_days
+        # Only angles that still need leads get contacts. Before 2026-10-26 every contact was handed to one of ALL the angles by a hash of its company, so a third of
+        # everything sourced went to a finished angle (585 of the 628 banked contacts belonged to A5, none to A7) and the last open angle starved at a third of the stream.
+        have_now = counts(campaign_of)
+        open_list = [a for a in angles if have_now[a] < targets[a]] or list(angles)
         # Troy, 2026-10-09: 40/tick was too slow -- settled on 100/tick ("100 per hour"),
         # which on this job's real ~2-hour cadence averages ~50/hour, ~1,200/day. At
         # ~$0.0045/company (one Sonnet call each) that's ~$5.40/day, clearing the real
@@ -541,7 +551,7 @@ def fill(post: bool = True) -> dict:
                         "AND coalesce(fit_reason,'') <> %s", (list(t1_by_dom), STAMP))
             judged_ok = {r["domain"] for r in cur.fetchall()}
         for dom in sorted(t1_by_dom, key=lambda d: (d not in judged_ok, hashlib.sha256(d.encode()).hexdigest())):
-            a = list(angles)[int(hashlib.sha256(f"wave1:{dom}".encode()).hexdigest(), 16) % len(angles)]
+            a = _assign(dom, open_list)
             for r in t1_by_dom[dom][:_seats()]:
                 queue[a].append({**r, "copy_variant": angles[a]})
         db.log(run_id, "wave1_fill", f"never-contacted queued first: {len(tier1)} contacts at {len(t1_by_dom)} companies")
@@ -585,7 +595,7 @@ def fill(post: bool = True) -> dict:
             chosen = sorted(cs, key=lambda c: -score_title(c.title, None))[:_seats()]   # best titles get the seats; none are dropped
             if not chosen:
                 continue
-            a = list(angles)[int(hashlib.sha256(f"wave1:{dom}".encode()).hexdigest(), 16) % len(angles)]
+            a = _assign(dom, open_list)
             for c in chosen:
                 queue[a].append({"email": c.email, "first_name": c.first_name, "last_name": c.last_name,
                                  "title": c.title, "company_domain": dom, "company_name": c.company,

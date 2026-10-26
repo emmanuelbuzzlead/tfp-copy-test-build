@@ -720,3 +720,17 @@ def test_priority_verticals_are_searched_first_and_sourced_in_volume(monkeypatch
     monkeypatch.setenv("SCALE_PRIORITY_BOOST", "4")
     testrun._source_round(Prof, {}, 150)
     assert calls == [("Construction and Infrastructure", 600), ("Machinery and Equipment Manufacturing", 600)]    # trucking is not sourced further
+
+
+def test_contacts_are_only_assigned_to_angles_that_still_need_leads():
+    from collections import Counter
+    from app import wave1_fill
+    doms = [f"company{i}.com" for i in range(3000)]
+    both = Counter(wave1_fill._assign(d, ["A7", "A10"]) for d in doms)
+    assert set(both) == {"A7", "A10"} and 1300 < both["A7"] < 1700           # a finished A5 takes no share: the two open angles split the stream
+    only = Counter(wave1_fill._assign(d, ["A7"]) for d in doms)
+    assert only == {"A7": 3000}                                              # the last open angle gets all of it, not a third
+    assert wave1_fill._assign("steelco.com", ["A7", "A10"]) == wave1_fill._assign("steelco.com", ["A7", "A10"])     # stable: one company never splits
+    import inspect
+    src = inspect.getsource(wave1_fill.fill)
+    assert "open_list = [a for a in angles if have_now[a] < targets[a]]" in src and "_assign(dom, open_list)" in src
