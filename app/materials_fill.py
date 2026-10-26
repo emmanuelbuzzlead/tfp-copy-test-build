@@ -346,7 +346,8 @@ def status() -> list[dict] | None:
     return out
 
 
-MAX_ADD = int(os.getenv("MAX_ADD_LEADS", "2000"))
+MAX_ADD = int(os.getenv("MAX_ADD_LEADS", "3000"))
+MIN_ADD_WEB = 500
 
 
 def register(cid: int, target_leads: int, materials: bool = False, user: str | None = None) -> dict:
@@ -372,15 +373,50 @@ def _nudge() -> None:
         pass
 
 
+def overview() -> list[dict]:
+    """Every campaign the controls can add leads to: the copy-test angle campaigns and the fill campaigns, with where each stands."""
+    from .clients import emailbison
+    out: list[dict] = []
+    try:
+        from . import testgrid
+        fill_target = int(((testgrid.load_config() or {}).get("fill") or {}).get("target", 0))
+        with db.cursor() as cur:
+            cur.execute("SELECT angle, campaign_id FROM copy_test_campaigns WHERE is_primary ORDER BY angle")
+            angles = [(r["angle"], int(r["campaign_id"])) for r in cur.fetchall()]
+            cur.execute("SELECT angle, target_leads FROM scale_targets")
+            raised = {r["angle"]: int(r["target_leads"]) for r in cur.fetchall()}
+    except Exception:
+        angles, raised, fill_target = [], {}, 0
+    for angle, cid in angles:
+        c = emailbison.get_campaign(cid) or {}
+        out.append({"campaign": cid, "kind": "angle", "angle": angle, "name": c.get("name") or angle, "loaded": int(c.get("total_leads") or 0),
+                    "target": max(fill_target, raised.get(angle, 0)), "sent": int(c.get("emails_sent") or 0), "interested": int(c.get("interested") or 0)})
+    for c in (status() or []):
+        out.append({"campaign": c["campaign"], "kind": "fill", "angle": None, "name": c.get("name") or f"campaign {c['campaign']}", "loaded": c["loaded"],
+                    "target": c["target"], "sent": c.get("sent", 0), "interested": c.get("interested", 0)})
+    return out
+
+
 def add_leads(cid: int, n: int, user: str | None = None) -> dict:
     """The button: add n more leads to a campaign this fill loads. The goal becomes what is in the campaign now plus n; the job picks it up and the
     producer finds the contacts. Capped per press (MAX_ADD_LEADS, default 2,000)."""
     n = int(n)
     if n <= 0 or n > MAX_ADD:
         return {"ok": False, "reason": f"pick between 1 and {MAX_ADD:,} leads"}
+    ang = next((x for x in overview() if x["campaign"] == cid and x["kind"] == "angle"), None)
+    if ang:
+        # A copy-test angle: the existing scale-up path raises its goal and the two-hourly tick writes the copy and loads it.
+        from . import testgrid
+        new_target = max(ang["target"], ang["loaded"] + n)
+        res = testgrid.auto_expand_champion(ang["angle"], None, target_leads=new_target)
+        db.log(None, "materials_fill", f"add_leads: angle {ang['angle']} (campaign {cid}) {ang['loaded']} -> {new_target} (+{n}) by {user or 'unknown'}: {res}")
+        return {"ok": bool(res.get("target_set")), "campaign": cid, "was": ang["loaded"], "target": new_target, "added": n,
+                "reason": res.get("reason", "nothing changed"),
+                "note": f"{ang['angle']} is a copy-test angle: copy is written for each lead and the scale-up runs every 2 hours, so it is slower than a fill campaign. "
+                        "Adding to one angle also tips the balance of the test."}
     sp = next((x for x in specs() if x["campaign"] == cid), None)
     if not sp:
-        return {"ok": False, "reason": f"campaign {cid} is not a fill campaign here. Register it first with `register {cid} <target> company`"}
+        return {"ok": False, "reason": f"campaign {cid} is not one of this client's campaigns. Register a fill campaign with `register {cid} <target> company`"}
     now = loaded(cid)
     new_target = max(sp["target"], now + n)
     raise_target(cid, new_target)
@@ -400,11 +436,11 @@ def add_leads(cid: int, n: int, user: str | None = None) -> dict:
 def controls_blocks() -> list[dict]:
     """A Slack message: each fill campaign with its progress and +500 / +1,000 buttons (each asks 'are you sure' first)."""
     blocks: list[dict] = []
-    for c in (status() or []):
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*{c.get('name') or 'Campaign'}* (campaign {c['campaign']}): {c['loaded']:,} of {c['target']:,} loaded"
+    for c in overview():
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*{c.get('name') or 'Campaign'}* (campaign {c['campaign']}{', copy test ' + c['angle'] if c.get('angle') else ''}): {c['loaded']:,} of {c['target']:,} loaded"
                        + (f", {c['sent']:,} sent, {c['interested']} interested" if c.get("sent") else ", nothing sent yet")}})
         elements = []
-        for n in (500, 1000):
+        for n in (500, 1000, 3000):
             elements.append({"type": "button", "text": {"type": "plain_text", "text": f"Add {n:,} leads"}, "action_id": f"add_leads_{n}", "value": f"{c['campaign']}|{n}",
                              "confirm": {"title": {"type": "plain_text", "text": f"Add {n:,} leads?"},
                                          "text": {"type": "mrkdwn", "text": f"Raises campaign {c['campaign']}'s goal to {c['loaded'] + n:,} and starts finding contacts. It spends contact search and verification credits."},

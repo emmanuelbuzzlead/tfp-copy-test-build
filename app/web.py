@@ -152,6 +152,29 @@ def runway_page() -> HTMLResponse:
         return HTMLResponse(f"<pre>runway unavailable: {exc}</pre>", status_code=500)
 
 
+@app.post("/api/add-leads")
+async def api_add_leads(request: Request, authorization: str | None = Header(None)) -> JSONResponse:
+    """The page's Add leads button. Needs the ADMIN_TOKEN bearer: the live page itself is public, this route is not."""
+    import os
+    from fastapi.concurrency import run_in_threadpool
+    token = os.environ.get("ADMIN_TOKEN", "")
+    supplied = (authorization or "").removeprefix("Bearer ").strip()
+    if not token or not supplied or not secrets.compare_digest(supplied, token):
+        raise HTTPException(401, "bad or missing admin password")
+    try:
+        body = await request.json()
+        cid, n = int(body.get("campaign")), int(body.get("leads"))
+    except Exception:
+        raise HTTPException(400, "send {\"campaign\": <id>, \"leads\": <500 to 3000>}")
+    from . import materials_fill
+    if not materials_fill.MIN_ADD_WEB <= n <= materials_fill.MAX_ADD:
+        raise HTTPException(400, f"pick between {materials_fill.MIN_ADD_WEB:,} and {materials_fill.MAX_ADD:,} leads")
+    r = await run_in_threadpool(materials_fill.add_leads, cid, n, "web page")
+    msg = (f"Adding {r['added']:,} leads to campaign {r['campaign']}: it holds {r['was']:,}, the goal is now {r['target']:,}. {r.get('note', '')}" if r.get("ok")
+           else r.get("reason", "nothing changed"))
+    return JSONResponse({"ok": bool(r.get("ok")), "message": msg})
+
+
 @app.get("/scorecard", response_class=PlainTextResponse)
 def sourcing_scorecard() -> PlainTextResponse:
     """Is sourcing working well? Yield, fit rate, speed, held reasons, bounce rate and provider health (app/sourcing_health.py). Read-only."""

@@ -123,7 +123,7 @@ def test_runway_page_renders_in_plain_words(monkeypatch):
     monkeypatch.setattr(runway_page, "held_reasons", lambda: [("Email came out longer than the cap, even after retries", 40)])
     monkeypatch.setattr(runway_page, "_vertical_rows", lambda: [{"v": "Food and Beverage Production", "sourced": 373, "searched": 114, "with_contacts": 57}])
     html = runway_page.page_html()
-    assert "239 of 4,500 leads loaded (5%)" in html and "What I recommend" in html and "Contacts ready for copy" in html and 'http-equiv="refresh"' in html
+    assert "239 of 4,500 leads loaded (5%)" in html and "What I recommend" in html and "Contacts ready for copy" in html
 
 
 def test_own_product_and_proof_names_do_not_trip_the_wrong_company_check():
@@ -520,6 +520,7 @@ def test_add_leads_raises_the_goal_by_the_amount_pressed_and_is_capped(monkeypat
     from app import materials_fill as mf, runway, testrun
     raised = {}
     monkeypatch.setattr(mf, "specs", lambda: [{"campaign": 2174, "target": 2100, "materials": False}])
+    monkeypatch.setattr(mf, "overview", lambda: [])
     monkeypatch.setattr(mf, "loaded", lambda cid=None: 2103)
     monkeypatch.setattr(mf, "raise_target", lambda cid, t: raised.update({cid: t}))
     monkeypatch.setattr(mf, "_nudge", lambda: None)
@@ -528,8 +529,8 @@ def test_add_leads_raises_the_goal_by_the_amount_pressed_and_is_capped(monkeypat
     monkeypatch.setattr(runway, "numbers", lambda: {"left": 8000})
     r = mf.add_leads(2174, 500, "emmanuel")
     assert r["ok"] and r["target"] == 2603 and raised == {2174: 2603} and "8,000 companies" in r["note"]
-    assert not mf.add_leads(2174, 5000)["ok"] and not mf.add_leads(2174, 0)["ok"]
-    assert "not a fill campaign" in mf.add_leads(9999, 100)["reason"]
+    assert not mf.add_leads(2174, 5000)["ok"] and not mf.add_leads(2174, 0)["ok"]       # above the 3,000 cap
+    assert "not one of this client" in mf.add_leads(9999, 100)["reason"]
 
 
 def test_slack_add_leads_button_and_commands_are_wired():
@@ -541,3 +542,35 @@ def test_slack_add_leads_button_and_commands_are_wired():
     src = inspect.getsource(s6_approval.handle_command)
     assert 'action in ("campaigns", "controls")' in src and 'action == "add"' in src and 'action == "register"' in src
     assert "confirm" in inspect.getsource(mf.controls_blocks)             # every button asks "are you sure" first
+
+
+def test_page_has_a_500_to_3000_picker_per_campaign_and_the_endpoint_needs_the_password(monkeypatch):
+    from app import materials_fill, runway_page, web
+    monkeypatch.setattr(materials_fill, "overview", lambda: [
+        {"campaign": 2107, "kind": "angle", "angle": "A10", "name": "A10 peer proof", "loaded": 2373, "target": 2973, "sent": 2441, "interested": 1},
+        {"campaign": 2174, "kind": "fill", "angle": None, "name": "Simple one liners", "loaded": 2103, "target": 2100, "sent": 1046, "interested": 0}])
+    html = runway_page._controls_html()
+    assert 'id="n-2107"' in html and 'id="n-2174"' in html and 'value="500"' in html and 'value="3000"' in html and "addLeads(2174)" in html
+    assert "/api/add-leads" in runway_page.ADD_JS and "Authorization" in runway_page.ADD_JS
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv("ADMIN_TOKEN", "s3cret")
+    c = TestClient(web.app)
+    assert c.post("/api/add-leads", json={"campaign": 2174, "leads": 500}).status_code == 401
+    assert c.post("/api/add-leads", json={"campaign": 2174, "leads": 500}, headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert c.post("/api/add-leads", json={"campaign": 2174, "leads": 100}, headers={"Authorization": "Bearer s3cret"}).status_code == 400
+    assert c.post("/api/add-leads", json={"campaign": 2174, "leads": 5000}, headers={"Authorization": "Bearer s3cret"}).status_code == 400
+    monkeypatch.setattr(materials_fill, "add_leads", lambda cid, n, user=None: {"ok": True, "campaign": cid, "was": 2103, "target": 2603, "added": n, "note": "ok"})
+    r = c.post("/api/add-leads", json={"campaign": 2174, "leads": 500}, headers={"Authorization": "Bearer s3cret"})
+    assert r.status_code == 200 and r.json()["ok"] and "2,603" in r.json()["message"]
+    monkeypatch.delenv("ADMIN_TOKEN")
+    assert c.post("/api/add-leads", json={"campaign": 2174, "leads": 500}, headers={"Authorization": "Bearer "}).status_code == 401       # no token set: closed
+
+
+def test_angle_campaigns_use_the_scale_path_when_leads_are_added(monkeypatch):
+    from app import materials_fill as mf, testgrid
+    monkeypatch.setattr(mf, "overview", lambda: [{"campaign": 2107, "kind": "angle", "angle": "A10", "name": "A10", "loaded": 2373, "target": 2973}])
+    monkeypatch.setattr(mf.db, "log", lambda *a, **k: None)
+    seen = {}
+    monkeypatch.setattr(testgrid, "auto_expand_champion", lambda angle, run_id=None, target_leads=None, requires_approval=False: seen.update(angle=angle, target=target_leads) or {"target_set": True})
+    r = mf.add_leads(2107, 1000, "web page")
+    assert r["ok"] and seen == {"angle": "A10", "target": 3373} and "copy-test angle" in r["note"]

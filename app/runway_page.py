@@ -85,6 +85,46 @@ def _row(name: str, val: float, of: float, text: str, cls: str = "") -> str:
     return f'<div class="row"><div class="name">{escape(name)}</div><div class="bar {cls}"><i style="width:{w:.1f}%"></i></div><div class="val">{escape(text)}</div></div>'
 
 
+ADD_JS = """<script>
+function tfpToken(){try{return localStorage.getItem('tfp_admin')||'';}catch(e){return '';}}
+async function addLeads(id){
+  const n=document.getElementById('n-'+id).value, msg=document.getElementById('m-'+id);
+  let t=tfpToken();
+  if(!t){t=prompt('Admin password (the ADMIN_TOKEN value in the Railway variables)')||'';if(!t){return;}}
+  if(!confirm('Add '+Number(n).toLocaleString()+' leads to campaign '+id+'? It spends contact search and verification credits.')){return;}
+  msg.textContent='working...';
+  try{
+    const r=await fetch('/api/add-leads',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({campaign:id,leads:Number(n)})});
+    const j=await r.json().catch(function(){return {};});
+    if(r.status===401){try{localStorage.removeItem('tfp_admin');}catch(e){} msg.textContent='Wrong password.';return;}
+    try{localStorage.setItem('tfp_admin',t);}catch(e){}
+    msg.textContent=j.message||('Error '+r.status);
+  }catch(e){msg.textContent='Could not reach the service.';}
+}
+var lastTouch=0;document.addEventListener('change',function(){lastTouch=Date.now();});
+setInterval(function(){if(Date.now()-lastTouch>180000){location.reload();}},60000);
+</script>"""
+
+
+def _controls_html() -> str:
+    """One row per campaign with a 500 to 3,000 picker and an Add leads button. The button asks for the admin password (ADMIN_TOKEN) the first time."""
+    try:
+        from . import materials_fill
+        rows = materials_fill.overview()
+    except Exception:
+        return ""
+    if not rows:
+        return ""
+    opts = "".join(f'<option value="{v}">{v:,}</option>' for v in (500, 1000, 1500, 2000, 2500, 3000))
+    body = "".join(
+        f'<div class="row"><div class="name">{escape(str(r["name"]))} (campaign {r["campaign"]}{", copy test " + escape(str(r["angle"])) if r.get("angle") else ""}): '
+        f'{r["loaded"]:,} loaded</div><div class="val" style="width:auto"><select id="n-{r["campaign"]}">{opts}</select> '
+        f'<button type="button" onclick="addLeads({r["campaign"]})">Add leads</button> <span id="m-{r["campaign"]}" class="sub"></span></div></div>' for r in rows)
+    return ('<h2>Add leads to a campaign</h2><div class="panel">' + body +
+            '<p class="sub">Pick 500 to 3,000 and press Add leads. It raises the goal of that campaign and finds the contacts, and spends credits. '
+            'Copy-test campaigns are slower because copy is written for each lead, and adding to one tips the balance of the test.</p></div>')
+
+
 def page_html() -> str:
     n = numbers()
     prof = client.profile()
@@ -163,14 +203,16 @@ def page_html() -> str:
         _card(f"{n['left']:,}", "Companies ready to search", f"never emailed, passed fit, in a declared vertical; {n['sourced']:,} found in all"),
         _card(f"{n['per_hour']:,}", "Leads an hour", "loaded in the last 60 minutes"),
     ])
+    controls = _controls_html()
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="60"><title>TFP runway</title><style>{CSS}</style></head><body><div class="wrap">
+<title>TFP runway</title><style>{CSS}</style></head><body><div class="wrap">
 <h1>Truck Fall Prevention: scale-up runway</h1><div class="sub">Updated {now}. This page refreshes itself every minute.</div>
 <div class="hero"><div class="big">{hero_big}</div>
 <div class="sub">{escape(hero_sub)}</div>
 <span class="pill {tone}">{escape(tone_txt)}</span></div>
 <div class="cards">{cards}</div>
 <h2>Leads by campaign</h2><div class="panel">{angle_rows}{og_note}</div>
+{controls}
 <h2>From companies to leads</h2><div class="panel">{funnel}
 <p class="sub">About {n['cps']:.1f} contacts come out of every company searched, so the {n['left']:,} companies left are worth roughly {int(n['left'] * n['cps']):,} contacts.</p></div>
 <h2>What is holding leads back</h2><div class="panel">{held_html}</div>
@@ -179,4 +221,4 @@ def page_html() -> str:
 <p class="sub">Yield = companies that gave verified contacts, out of those searched.</p></div>
 <div class="foot"><b>Words used here.</b> Found: sourced from QuickEnrich or Lead Ocean. Searched: we looked for people there. Ready for copy: verified email, passed the website fit check, no email written yet.
 Held: the email broke a copy rule and was set aside. Plain text version: <a href="/runway.txt">/runway.txt</a>.</div>
-</div></body></html>"""
+</div>{ADD_JS}</body></html>"""
