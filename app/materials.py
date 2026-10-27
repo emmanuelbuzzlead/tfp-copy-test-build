@@ -42,14 +42,14 @@ SYSTEM = (
 )
 
 
-def check_company(v: str | None) -> list[str]:
+def check_company(v: str | None, max_words: int = MAX_COMPANY_WORDS) -> list[str]:
     """Problems with a COMPANY value (empty list = clean). Same rules as preflight_copy_fields.check_company."""
     out: list[str] = []
     if not v or not v.strip():
         return ["empty"]
     w = v.split()
-    if len(w) > MAX_COMPANY_WORDS:
-        out.append(f"{len(w)} words (max {MAX_COMPANY_WORDS})")
+    if len(w) > max_words:
+        out.append(f"{len(w)} words (max {max_words})")
     if w and w[-1].lower().strip(",.") in SUFFIX_SET:
         out.append("ends in legal suffix")
     if w and w[-1].lower().strip(",.&") in CONNECTORS:

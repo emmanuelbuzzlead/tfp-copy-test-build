@@ -57,7 +57,10 @@ OVERRIDES = {
 }
 
 
-def clean_company_name(name: str) -> str:
+def clean_company_name(name: str, max_words: int = MAX_WORDS) -> str:
+    """Cleaned COMPANY merge value, at most max_words words. 3 is the TFP standard; the four quick-run campaigns (2210 to 2213) use 2 (Emmanuel, 2026-10-27)."""
+    cap = max_words
+    min_words = min(MIN_WORDS, cap)
     c = (name or "").strip()
     if not c:
         return ""
@@ -84,24 +87,24 @@ def clean_company_name(name: str) -> str:
 
     # first pass: drop trailing generic descriptors (keeps the meaningful part)
     words = c.split()
-    while len(words) > MAX_WORDS and len(words) > MIN_WORDS:
+    while len(words) > cap and len(words) > min_words:
         if words[-1].lower().strip(",.&") in TRAILING_GENERIC:
             words.pop()
         else:
             break
 
-    # hard cap: 3 words max, no exceptions. Source data sometimes concatenates
+    # hard cap: max_words (3 by default), no exceptions. Source data sometimes concatenates
     # two company names ("Oklahoma Tank Lines United Petroleum Transports"),
     # which generic-dropping alone can't fix.
-    truncated = len(words) > MAX_WORDS
-    words = words[:MAX_WORDS]
+    truncated = len(words) > cap
+    words = words[:cap]
 
     # The hard cap can RE-EXPOSE a suffix that was mid-string and therefore
     # invisible to the end-anchored strip above:
     #   "Schnellecke Logistics AG & Co. KG"  -> cap -> "Schnellecke Logistics AG"
     #   "Mover Services, Inc. - Interstate Agent for Wheaton" -> "Mover Services, Inc"
     # so strip again now that a new word is final. Never go below MIN_WORDS.
-    while len(words) > MIN_WORDS and words[-1].lower().strip(",.") in {
+    while len(words) > min_words and words[-1].lower().strip(",.") in {
             s.lower() for s in SUFFIXES}:
         words.pop()
 
@@ -113,7 +116,7 @@ def clean_company_name(name: str) -> str:
     # "Oklahoma Tank Lines" -> "Oklahoma Tank", where "Lines" is part of the
     # real company name. A slightly long-looking name beats a wrong one.
     if truncated:
-        while len(words) > MIN_WORDS and len(words[-1].strip(",.")) <= 1:
+        while len(words) > min_words and len(words[-1].strip(",.")) <= 1:
             words.pop()
 
     # never end on a dangling connector ("Smith and" -> "Smith")

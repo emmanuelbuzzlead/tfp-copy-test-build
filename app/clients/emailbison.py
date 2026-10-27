@@ -148,7 +148,7 @@ def _lead_payload(contact: dict) -> dict:
         from .. import client as _client
         if _client.profile().company_custom_field:
             from ..company_name_cleaner import clean_company_name
-            custom_company = {"COMPANY": clean_company_name(contact.get("company_name") or contact.get("company_domain") or "")}
+            custom_company = {"COMPANY": clean_company_name(contact.get("company_name") or contact.get("company_domain") or "", int(contact.get("company_max_words") or 3))}
     except Exception:
         custom_company = {}
     if contact.get("materials_hauled"):

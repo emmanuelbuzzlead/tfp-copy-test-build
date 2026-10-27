@@ -752,3 +752,14 @@ def test_gateway_verify_uses_small_batches_and_re_asks_people_the_gateway_skippe
     out = gv.find_and_verify(people)
     assert gv.BATCH == 16 and max(asked[:3]) <= 16
     assert all(r for r in out) and [r["valid_email"] for r in out] == [p["email"] for p in people]
+
+
+def test_company_cleaner_cap_is_three_by_default_and_two_for_the_quick_run_campaigns():
+    from app import materials
+    from app.company_name_cleaner import clean_company_name
+    assert clean_company_name("Oklahoma Tank Lines United Petroleum Transports") == "Oklahoma Tank Lines"
+    assert len(clean_company_name("Oklahoma Tank Lines United Petroleum Transports", 2).split()) == 2
+    assert len(clean_company_name("Acme Building Supply Company, LLC", 2).split()) <= 2
+    assert clean_company_name("Steel Dynamics, Inc.", 2) == "Steel Dynamics"
+    assert materials.check_company("Oklahoma Tank Lines") == []
+    assert materials.check_company("Oklahoma Tank Lines", 2) == ["3 words (max 2)"]
