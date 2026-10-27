@@ -109,6 +109,17 @@ def _find_chunk_safe(people: list[dict]) -> list[dict]:
         return out
 
 
+def _reask(people: list[dict]) -> list[dict]:
+    """One more try for people the gateway skipped. A 504 here must not lose the whole call (it cost two 60-company chunks on 2026-10-27): they stay unanswered instead.
+    A rejected key (VendorOutage) still stops everything."""
+    try:
+        return _find_chunk(people)
+    except VendorOutage:
+        raise
+    except VendorError:
+        return [{} for _ in people]
+
+
 def find_and_verify(people: list[dict]) -> list[dict]:
     """people: dicts with first_name, last_name, domain, company_name, title, email,
     linkedin_url. Returns one result per person, in order, each with valid_email, status,
@@ -125,7 +136,7 @@ def find_and_verify(people: list[dict]) -> list[dict]:
     if missing:
         again = [missing[i:i + RETRY_BATCH] for i in range(0, len(missing), RETRY_BATCH)]
         with ThreadPoolExecutor(max_workers=min(WORKERS, len(again))) as pool:
-            answers = list(pool.map(lambda idx: _find_chunk([people[i] for i in idx]), again))
+            answers = list(pool.map(lambda idx: _reask([people[i] for i in idx]), again))
         for idx, ans in zip(again, answers):
             for i, r in zip(idx, ans):
                 if r:

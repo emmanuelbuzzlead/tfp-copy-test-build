@@ -812,3 +812,21 @@ def test_two_word_company_names_do_not_collapse_to_initials():
     assert c("Z Contractors Inc.", 2) == "Z Contractors"
     assert c("21st Century Plastics Inc", 2) == "21st Century"
     assert c("Steel Dynamics, Inc.") == "Steel Dynamics"             # the 3-word path is not changed by the 2-word rule
+
+
+def test_gateway_verify_a_504_during_the_re_ask_does_not_lose_the_call(monkeypatch):
+    from app.clients import gateway_verify as gv
+    from app.clients.http import VendorError
+    monkeypatch.setattr(gv, "RETRY_PAUSE", 0)
+    n = {"calls": 0}
+
+    def fake(people):
+        n["calls"] += 1
+        if n["calls"] == 1:
+            return [{} for _ in people]                       # the gateway skips everyone in the first pass
+        raise VendorError("buzzlead-verify", 504, "upstream request timeout")   # and times out on the re-ask
+
+    monkeypatch.setattr(gv, "_find_chunk", fake)
+    people = [{"first_name": "a", "last_name": str(i), "domain": "x.com", "email": f"a{i}@x.com"} for i in range(10)]
+    out = gv.find_and_verify(people)
+    assert len(out) == 10 and not any(out)
