@@ -22,6 +22,7 @@ the leftover is logged. On 2026-10-27 TFP did not reproduce it at 150 people (0 
 from __future__ import annotations
 
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import httpx
@@ -33,6 +34,7 @@ DEFAULT_BASE = "https://research-615339619342.us-east4.run.app"
 PROVIDERS = ["millionverifier", "trykit", "bounceban"]
 BATCH = 16
 RETRY_BATCH = 8
+RETRY_PAUSE = 30
 WORKERS = 4
 # A 50-person call with finder fallbacks is slow; the shared 90s read timeout cuts it off
 # mid-spend, which would bill the credits and discard the answer.
@@ -87,6 +89,26 @@ def _key(p: dict) -> tuple:
             (p.get("domain") or "").lower(), (p.get("email") or "").lower())
 
 
+def _find_chunk_safe(people: list[dict]) -> list[dict]:
+    """_find_chunk, but a gateway error (a 504 that outlasted the HTTP layer's four tries) costs only this batch: wait, ask again in halves, and return {} for
+    anyone still unanswered so the re-ask in find_and_verify and the leftover count see them. A rejected key (VendorOutage) still stops everything."""
+    try:
+        return _find_chunk(people)
+    except VendorOutage:
+        raise
+    except VendorError:
+        time.sleep(RETRY_PAUSE)
+        out: list[dict] = []
+        for i in range(0, len(people), RETRY_BATCH):
+            try:
+                out += _find_chunk(people[i:i + RETRY_BATCH])
+            except VendorOutage:
+                raise
+            except VendorError:
+                out += [{} for _ in people[i:i + RETRY_BATCH]]
+        return out
+
+
 def find_and_verify(people: list[dict]) -> list[dict]:
     """people: dicts with first_name, last_name, domain, company_name, title, email,
     linkedin_url. Returns one result per person, in order, each with valid_email, status,
@@ -95,7 +117,7 @@ def find_and_verify(people: list[dict]) -> list[dict]:
         return []
     chunks = [people[i:i + BATCH] for i in range(0, len(people), BATCH)]
     with ThreadPoolExecutor(max_workers=min(WORKERS, len(chunks))) as pool:
-        out = list(pool.map(_find_chunk, chunks))
+        out = list(pool.map(_find_chunk_safe, chunks))
     results = [r for chunk in out for r in chunk]
     # A person with no answer would read as "unknown" downstream, which is a lost contact
     # rather than a verdict. Ask again once, in smaller calls, before accepting that.

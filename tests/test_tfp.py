@@ -763,3 +763,41 @@ def test_company_cleaner_cap_is_three_by_default_and_two_for_the_quick_run_campa
     assert clean_company_name("Steel Dynamics, Inc.", 2) == "Steel Dynamics"
     assert materials.check_company("Oklahoma Tank Lines") == []
     assert materials.check_company("Oklahoma Tank Lines", 2) == ["3 words (max 2)"]
+
+
+def test_list_enrich_gates_are_strict_because_any_lead_can_get_any_email_1_variant():
+    from app import list_enrich as L
+    good = dict(city="Tulsa, OK", ships_on_flatbed="yes", shipped_product="Steel Joists", plant_count="4", is_coil_producer="no")
+    ok, _, merge = L.judge("HG", good)
+    assert ok and merge == {"CITY": "Tulsa", "SHIPPED_PRODUCT": "steel joists", "PLANT_COUNT": "4"}
+    assert not L.judge("HG", {**good, "plant_count": 1})[0]            # variant 3 says "with 1 plants"
+    assert not L.judge("HG", {**good, "is_coil_producer": "yes"})[0]   # variant 1 is for odd shapes, not coils
+    bm = dict(city="Boise", operates_yards="yes", branch_count=3, product_mix="lumber and trusses", has_own_delivery_fleet="yes")
+    assert L.judge("BM", bm)[0] and not L.judge("BM", {**bm, "has_own_delivery_fleet": "unclear"})[0]
+    assert not L.judge("BM", {**bm, "branch_count": 1})[0] and not L.judge("BM", {**bm, "city": None})[0]
+    assert L.judge("CN", dict(city="Dallas", loads_flatbeds="likely"))[0] and not L.judge("CN", dict(city="Dallas", loads_flatbeds="no"))[0]
+    assert L.judge("BR", dict(city="Reno", has_physical_facility="yes", flatbed_ops="likely"))[0]
+
+
+def test_lead_payload_carries_list_specific_merge_fields():
+    from app.clients import emailbison
+    lead = emailbison._lead_for_upsert({"email": "a@b.com", "first_name": "A", "company_name": "Acme", "extra_fields": {"CITY": "Tulsa"}, "company_max_words": 2})
+    assert {"name": "city", "value": "Tulsa"} in lead["custom_variables"]
+
+
+def test_gateway_verify_a_failed_batch_costs_only_that_batch(monkeypatch):
+    from app.clients import gateway_verify as gv
+    from app.clients.http import VendorError
+    monkeypatch.setattr(gv, "RETRY_PAUSE", 0)
+    calls = {"n": 0}
+
+    def fake(people):
+        calls["n"] += 1
+        if len(people) > gv.RETRY_BATCH:        # the big batch times out every time, the halves work
+            raise VendorError("buzzlead-verify", 504, "upstream request timeout")
+        return [{"valid_email": p["email"]} for p in people]
+
+    monkeypatch.setattr(gv, "_find_chunk", fake)
+    people = [{"first_name": "a", "last_name": str(i), "domain": "x.com", "email": f"a{i}@x.com"} for i in range(40)]
+    out = gv.find_and_verify(people)
+    assert len(out) == 40 and all(r for r in out)

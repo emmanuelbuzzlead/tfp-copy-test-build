@@ -162,6 +162,7 @@ def _lead_payload(contact: dict) -> dict:
         "custom_fields": {
             **custom_company,
             "title": contact.get("title") or "",
+            **(contact.get("extra_fields") or {}),                              # list-specific merge fields (CITY, PRODUCT_MIX ...), see app/list_enrich.py
             "PERSONALIZATION 1": contact.get("personalization_1") or "",
             "PERSONALIZATION 2": contact.get("personalization_2") or "",
             "vertical": contact.get("vertical") or "",
