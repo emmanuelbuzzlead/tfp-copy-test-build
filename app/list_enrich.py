@@ -194,7 +194,9 @@ def refresh_company_names() -> dict:
     leads = []
     for r in rows:
         company = clean_company_name(r["n"], COMPANY_WORDS)
-        leads.append({"email": r["email"], "company": company, "custom_variables": [{"name": "company", "value": company}]})
+        nice = lambda v: (v or "").strip().title() if (v or "").isupper() or (v or "").islower() else (v or "").strip()     # same casing the load used
+        leads.append({"email": r["email"], "first_name": nice(r["first_name"]), "last_name": nice(r["last_name"]), "company": company,
+                      "custom_variables": [{"name": "company", "value": company}]})
     for i in range(0, len(leads), 100):
         emailbison._send_retry("POST", "/api/leads/create-or-update/multiple", {"leads": leads[i:i + 100], "existing_lead_behavior": "patch"})
     return {"leads": len(leads)}
