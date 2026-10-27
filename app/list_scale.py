@@ -323,18 +323,29 @@ def _list_loop(code: str, target: int, holder: str) -> None:
 
 
 def run() -> dict:
+    """Runs every list that is short of its goal and not stopped, and keeps checking: a list whose goal is raised or whose stop note is cleared starts within a minute."""
     holder = uuid.uuid4().hex[:10]
     ensure_tables()
     if not _lock(holder):
         return {"status": "another instance holds the lock"}
+    running: dict[str, object] = {}
+    started_any = False
     try:
-        t = targets()
-        pending = {c: v["target"] for c, v in t.items() if not v["stuck_reason"] and n_loaded(c) < v["target"]}
-        if not pending:
-            return {"status": "nothing to do"}
-        _say("Quick-run lists started: " + ", ".join(f"{LISTS[c]['name']} {n_loaded(c)}/{tg}" for c, tg in pending.items()) + ".")
-        with ThreadPoolExecutor(len(pending)) as pool:
-            list(pool.map(lambda kv: _list_loop(kv[0], kv[1], holder), pending.items()))
+        with ThreadPoolExecutor(len(LISTS)) as pool:
+            while True:
+                _beat(holder)
+                idle = {c for c in LISTS if c not in running or running[c].done()}        # read before the targets, so a list that just finished is seen as finished
+                t = targets()
+                new = {c: v["target"] for c, v in t.items() if c in idle and not v["stuck_reason"] and n_loaded(c) < v["target"]}
+                if new:
+                    if not started_any:
+                        _say("Quick-run lists started: " + ", ".join(f"{LISTS[c]['name']} {n_loaded(c)}/{tg}" for c, tg in new.items()) + ".")
+                        started_any = True
+                    for c, tg in new.items():
+                        running[c] = pool.submit(_list_loop, c, tg, holder)
+                if not any(not f.done() for f in running.values()) and not new:
+                    break
+                time.sleep(30)
         _say("Quick-run lists finished: " + ", ".join(f"{LISTS[c]['name']} {n_loaded(c)}" for c in LISTS) + ".")
         return {"status": "finished"}
     finally:

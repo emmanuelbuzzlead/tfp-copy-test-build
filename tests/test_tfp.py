@@ -868,3 +868,42 @@ def test_broad_angle_takes_other_verticals_only_after_warehousing_runs_out(monke
     assert br[0] == "Logistics, Warehousing and 3PL" and "Wholesale and Distribution" in br
     assert not {"Machinery and Equipment Manufacturing", "Building Materials and Products", "Construction and Infrastructure"} & set(br)
     assert ls.verticals_for("BM") == ["Building Materials and Products"]          # the other lists never fall back
+
+
+def test_quick_run_lists_job_starts_a_list_whose_stop_note_is_cleared_while_it_runs(monkeypatch):
+    import threading
+    from app import list_scale as ls
+    state = {"calls": 0, "started": [], "done": set()}
+    br_started = threading.Event()
+    monkeypatch.setattr(ls, "ensure_tables", lambda: None)
+    monkeypatch.setattr(ls, "_lock", lambda h: True)
+    monkeypatch.setattr(ls, "_beat", lambda h: None)
+    monkeypatch.setattr(ls, "_release", lambda h: None)
+    monkeypatch.setattr(ls, "_say", lambda t: None)
+    monkeypatch.setattr(ls.time, "sleep", lambda s: None)
+    monkeypatch.setattr(ls, "n_loaded", lambda c: 0)
+
+    def fake_targets():
+        state["calls"] += 1
+        out = {}
+        for c in ls.LISTS:
+            stuck = "finished" if c in state["done"] else None
+            if c == "BR" and state["calls"] < 3 and c not in state["done"]:
+                stuck = "out of companies"                       # BR is stopped at first, its note is cleared on the third check
+            if c in ("BM", "CN"):
+                stuck = "finished"
+            out[c] = {"target": 1000, "stuck_reason": stuck}
+        return out
+
+    def fake_loop(c, tg, h):
+        state["started"].append(c)
+        if c == "HG":
+            br_started.wait(5)                                   # HG keeps the job alive until BR has been started
+        else:
+            br_started.set()
+        state["done"].add(c)
+
+    monkeypatch.setattr(ls, "targets", fake_targets)
+    monkeypatch.setattr(ls, "_list_loop", fake_loop)
+    assert ls.run()["status"] == "finished"
+    assert sorted(state["started"]) == ["BR", "HG"]
