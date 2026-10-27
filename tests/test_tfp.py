@@ -857,3 +857,14 @@ def test_quick_run_lists_work_left_ignores_stopped_and_finished_lists(monkeypatc
 def test_gateway_calls_share_one_concurrency_cap():
     from app.clients import gateway_verify as gv
     assert gv._GATE._value >= 1
+
+
+def test_broad_angle_takes_other_verticals_only_after_warehousing_runs_out(monkeypatch):
+    from app import list_scale as ls
+    monkeypatch.setattr(ls, "_left_in", lambda verticals: 500)
+    assert ls.verticals_for("BR") == ["Logistics, Warehousing and 3PL"]
+    monkeypatch.setattr(ls, "_left_in", lambda verticals: 0)
+    br = ls.verticals_for("BR")
+    assert br[0] == "Logistics, Warehousing and 3PL" and "Wholesale and Distribution" in br
+    assert not {"Machinery and Equipment Manufacturing", "Building Materials and Products", "Construction and Infrastructure"} & set(br)
+    assert ls.verticals_for("BM") == ["Building Materials and Products"]          # the other lists never fall back

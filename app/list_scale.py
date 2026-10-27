@@ -30,7 +30,11 @@ LISTS = {
                                                                   "Automotive and Transportation Equipment"]},
     "BM": {"campaign": 2210, "name": "Building materials", "verticals": ["Building Materials and Products"]},
     "CN": {"campaign": 2212, "name": "Construction", "verticals": ["Construction and Infrastructure"]},
-    "BR": {"campaign": 2213, "name": "Warehousing", "verticals": ["Logistics, Warehousing and 3PL"]},
+    # The broad angle test: warehousing first; when its stored and newly sourced companies run out it takes the other shipping verticals (Emmanuel, 2026-10-27:
+    # "if nothing is found for the broad angle we can use other verticals since this is broad angle"). The other three lists keep their own verticals.
+    "BR": {"campaign": 2213, "name": "Warehousing", "verticals": ["Logistics, Warehousing and 3PL"],
+           "fallback": ["Wholesale and Distribution", "Other Industrial Shippers", "Food and Beverage Production", "Trucking and Freight Carriers",
+                        "Consumer and Medical Products Manufacturing", "Defense and Aerospace Manufacturing", "Mining, Oil, Gas and Utilities", "Agriculture and Forestry"]},
 }
 DEFAULT_TARGET = 1000
 
@@ -67,6 +71,22 @@ def targets() -> dict[str, dict]:
         return {r["code"]: dict(r) for r in cur.fetchall()}
 
 
+def _left_in(verticals: list[str]) -> int:
+    with db.cursor() as cur:
+        cur.execute("""SELECT count(DISTINCT s.domain) n FROM staged_companies s JOIN company_funnel f ON f.domain = s.domain
+                       WHERE s.verdict = 'KEEP' AND s.vertical = ANY(%s) AND s.found_at IS NULL AND s.consumed_at IS NULL AND f.tier = 1
+                         AND NOT coalesce(f.replied, false) AND coalesce(f.fit, '') NOT IN ('LOW', 'NOT_FIT')""", (verticals,))
+        return int(cur.fetchone()["n"])
+
+
+def verticals_for(code: str) -> list[str]:
+    """The list's own verticals; plus its fallback verticals once its own are nearly used up (only the broad angle has any)."""
+    spec = LISTS[code]
+    primary = spec["verticals"]
+    fb = spec.get("fallback") or []
+    return primary + fb if fb and _left_in(primary) < 40 else primary
+
+
 def n_loaded(code: str) -> int:
     with db.cursor() as cur:
         cur.execute("SELECT count(*) n FROM contacts WHERE status = 'pushed' AND eb_campaign_id = %s", (LISTS[code]["campaign"],))
@@ -82,11 +102,7 @@ def n_held(code: str) -> int:
 
 
 def companies_left(code: str) -> int:
-    with db.cursor() as cur:
-        cur.execute("""SELECT count(DISTINCT s.domain) n FROM staged_companies s JOIN company_funnel f ON f.domain = s.domain
-                       WHERE s.verdict = 'KEEP' AND s.vertical = ANY(%s) AND s.found_at IS NULL AND s.consumed_at IS NULL AND f.tier = 1
-                         AND NOT coalesce(f.replied, false) AND coalesce(f.fit, '') NOT IN ('LOW', 'NOT_FIT')""", (LISTS[code]["verticals"],))
-        return int(cur.fetchone()["n"])
+    return _left_in(verticals_for(code))
 
 
 def work_left() -> bool:
@@ -134,7 +150,7 @@ def _release(holder: str) -> None:
 # ---- sourcing ----------------------------------------------------------------------------------------------------------------------------------------------
 
 def tag_bank(code: str) -> int:
-    """Verified contacts already banked for this list's verticals (no copy needed): hold them for this list, 4 per company, none contacted in the last 60 days,
+    """Verified contacts already banked for this list's verticals (its fallback ones too, once it uses them) (no copy needed): hold them for this list, 4 per company, none contacted in the last 60 days,
     none at a company that already has people in one of these campaigns."""
     camps = [v["campaign"] for v in LISTS.values()]
     with db.cursor() as cur:
@@ -145,7 +161,7 @@ def tag_bank(code: str) -> int:
                          AND s.vertical = ANY(%s) AND coalesce(f.fit, '') NOT IN ('LOW', 'NOT_FIT')
                          AND NOT EXISTS (SELECT 1 FROM recent_contacts r WHERE r.company_domain = c.company_domain AND r.campaign_date > now() - interval '60 days')
                          AND NOT EXISTS (SELECT 1 FROM contacts o WHERE o.company_domain = c.company_domain AND o.eb_campaign_id = ANY(%s) AND o.status = 'pushed')
-                       ORDER BY c.company_domain, c.email""", (LISTS[code]["verticals"], camps))
+                       ORDER BY c.company_domain, c.email""", (verticals_for(code), camps))
         per: dict[str, int] = {}
         keep = []
         for r in cur.fetchall():
@@ -176,10 +192,14 @@ def _verifier_wait() -> None:
 def _source_round(code: str) -> tuple[int, int] | None:
     """One chunk: search CHUNK companies for people, hold them. None when no company is waiting."""
     from . import scaling
-    verticals = LISTS[code]["verticals"]
+    verticals = verticals_for(code)
     with _claim_lock:
-        picked = scaling.pick_companies(verticals, CHUNK + len(_claimed))
-        fresh = [c for c in picked if c["domain"] not in _claimed][:CHUNK]
+        picked = scaling.pick_companies(verticals, CHUNK + len(_claimed) + 40)
+        with db.cursor() as cur:       # one company, one campaign: skip any that already has people in one of the four
+            cur.execute("SELECT DISTINCT company_domain d FROM contacts WHERE status = 'pushed' AND eb_campaign_id = ANY(%s) AND company_domain = ANY(%s)",
+                        ([v["campaign"] for v in LISTS.values()], [c["domain"] for c in picked]))
+            taken = {r["d"] for r in cur.fetchall()}
+        fresh = [c for c in picked if c["domain"] not in _claimed and c["domain"] not in taken][:CHUNK]
         _claimed.update(c["domain"] for c in fresh)
     if not fresh:
         return None
@@ -216,7 +236,7 @@ def _top_up(code: str) -> bool:
     """Source new companies for the list's main vertical when the stored ones run out. True when it ran."""
     from . import client, funnel, modes
     with _top_lock[code]:
-        if _topped[code] >= TOP_UPS or companies_left(code) >= 40:
+        if _topped[code] >= (1 if LISTS[code].get("fallback") else TOP_UPS) or companies_left(code) >= 40:
             return companies_left(code) >= 40
         _topped[code] += 1
         v = LISTS[code]["verticals"][0]
