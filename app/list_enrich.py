@@ -1,9 +1,10 @@
-"""Company-level enrichment and gating for the four quick-run lists (campaigns 2210 BM, 2211 HG, 2212 CN, 2213 BR), then the load.
+"""Company enrichment for the four quick-run lists (campaigns 2210 BM, 2211 HG, 2212 CN, 2213 BR), then the load.
 
-The campaign copy merges CITY, PRODUCT_MIX, SHIPPED_PRODUCT and PLANT_COUNT. EmailBison hands out the Email 1 variants lead by lead, so any lead can get any
-variant: a lead is loaded only when EVERY field its campaign's variants use is filled and valid, and the conditions the spec attaches to single variants
-(coil producers, one-plant companies, no own fleet) are applied to the whole list. A field the model is not sure of stays blank and the company is held back.
-Sources: clients/tfp/spec/TFP_Quick_Run_Campaign_Shell.md (gates, field rules); Emmanuel, 2026-10-27 (construction = anyone who loads flatbeds, COMPANY 2 words).
+The campaign copy merges CITY, PRODUCT_MIX, SHIPPED_PRODUCT and PLANT_COUNT. These companies were already fit-checked when they were sourced (Emmanuel, 2026-10-27:
+"these companies are already fit, we just need their enrichments for copy"), so there are NO fit gates here. The only test is that every field the list's
+copy merges is filled and renders: EmailBison hands out Email 1 variants lead by lead, so any lead can get any variant, and a blank would show as "your  plant".
+A field the model is not sure of stays blank and the company is held back, never guessed.
+Sources: clients/tfp/spec/TFP_Quick_Run_Campaign_Shell.md (field rules); COMPANY is 2 words for these campaigns.
 """
 from __future__ import annotations
 
@@ -28,29 +29,15 @@ COMMON = (
 )
 SPECIFIC = {
     "BM": (
-        "Company type: a building materials distributor or dealer with yards that load trucks.\n"
-        '- operates_yards: "yes" only if it has physical yards or branches that load trucks, else "no"\n'
-        "- branch_count: integer number of branches or yards in the US and Canada, or null\n"
-        '- product_mix: its 2 main stocked product groups, lowercase, joined with "and", for example "lumber and trusses", "roofing and siding", "rebar and wire mesh"\n'
-        '- has_own_delivery_fleet: "yes", "no" or "unclear" (the site mentions its own delivery trucks, boom trucks or flatbed delivery)'
+        '- product_mix: its 2 main stocked product groups, lowercase, joined with "and", for example "lumber and trusses", "roofing and siding", "rebar and wire mesh"'
     ),
     "HG": (
-        "Company type: a manufacturer of heavy, long or oversized goods that ship on flatbed trailers.\n"
-        '- ships_on_flatbed: "yes", "likely" or "no"\n'
         '- shipped_product: its main finished product, lowercase, PLURAL, 1 to 3 words, that reads correctly in "Your steel joists go out on flatbeds" '
         "(examples: steel joists, precast vaults, truck trailers)\n"
-        "- plant_count: integer number of US and Canadian plants, or null\n"
-        '- is_coil_producer: "yes" if its main product is steel or aluminum coil, else "no"'
+        "- plant_count: integer number of US and Canadian plants, or null"
     ),
-    "CN": (
-        "Company type: a construction, contracting or infrastructure company.\n"
-        '- loads_flatbeds: "yes", "likely" or "no": its own people load or unload equipment, steel, pipe, materials or machines on flatbed or lowboy trailers'
-    ),
-    "BR": (
-        "Company type: a warehousing, logistics or distribution company.\n"
-        '- has_physical_facility: "yes" if it operates warehouses or yards, "no" if it is a pure broker\n'
-        '- flatbed_ops: "yes", "likely" or "no": it handles flatbed or open-deck freight, yard operations, or heavy or oversized goods'
-    ),
+    "CN": "",
+    "BR": "",
 }
 FORMAT = "Reply with JSON only: an object holding city and the fields above, plus reason (one short sentence of evidence)."
 
@@ -81,43 +68,26 @@ def _int(v):
 
 
 def judge(code: str, f: dict) -> tuple[bool, str, dict]:
-    """(passes, reason, merge fields). Strict because any lead can get any Email 1 variant."""
+    """(usable, reason, merge fields). No fit gate: usable means every field the list's copy merges is filled and reads correctly."""
     city = _title(f.get("city"))
-
-    def yes(k):
-        return str(f.get(k) or "").lower() == "yes"
-
-    def ok(k):
-        return str(f.get(k) or "").lower() in {"yes", "likely"}
-
+    if not city:
+        return False, "city missing", {}
     if code == "BM":
-        pm, n = _words(f.get("product_mix"), 2, 5), _int(f.get("branch_count"))
-        if not yes("operates_yards"):
-            return False, "no yards", {}
-        if not n or n < 2:
-            return False, "fewer than 2 branches or unknown", {}
-        if not city or not pm or " and " not in pm:
-            return False, "city or product mix missing", {}
-        if not yes("has_own_delivery_fleet"):
-            return False, "no confirmed own delivery fleet (variant 1 says 'your own driver')", {}
+        pm = _words(f.get("product_mix"), 2, 5)
+        if not pm or " and " not in pm:
+            return False, "product mix missing", {}
         return True, "ok", {"CITY": city, "PRODUCT_MIX": pm}
     if code == "HG":
         sp, n = _words(f.get("shipped_product"), 1, 3), _int(f.get("plant_count"))
-        if not ok("ships_on_flatbed"):
-            return False, "does not ship on flatbeds", {}
-        if str(f.get("is_coil_producer") or "").lower() != "no":
-            return False, "coil producer or unknown (variant 1 is for odd shapes)", {}
-        if not city or not sp or not n or n < 2:
-            return False, "city, product or plant count missing, or a single plant (variant 3 needs 2+)", {}
+        if not sp:
+            return False, "shipped product missing", {}
+        if not n:
+            return False, "plant count missing", {}
+        if n < 2:
+            return False, "single plant: variant 3 would read 'with 1 plants'", {}
         return True, "ok", {"CITY": city, "SHIPPED_PRODUCT": sp, "PLANT_COUNT": str(n)}
-    if code == "CN":
-        if not ok("loads_flatbeds"):
-            return False, "does not load flatbeds", {}
-        return (True, "ok", {"CITY": city}) if city else (False, "city missing", {})
-    if code == "BR":
-        if not yes("has_physical_facility") or not ok("flatbed_ops"):
-            return False, "no facility or no flatbed operations", {}
-        return (True, "ok", {"CITY": city}) if city else (False, "city missing", {})
+    if code in ("CN", "BR"):
+        return True, "ok", {"CITY": city}
     raise ValueError(code)
 
 
@@ -168,7 +138,7 @@ def run(code: str, workers: int = 12) -> dict:
 
 
 def load(code: str, dry_run: bool = True) -> dict:
-    """Load the passing companies' held contacts (up to 4 each) into the list's campaign, COMPANY cleaned to 2 words."""
+    """Load the usable companies' held contacts (up to 4 each) into the list's campaign, COMPANY cleaned to 2 words."""
     from . import materials
     from .clients import emailbison
     from .company_name_cleaner import clean_company_name
