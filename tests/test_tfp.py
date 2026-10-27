@@ -800,3 +800,15 @@ def test_gateway_verify_a_failed_batch_costs_only_that_batch(monkeypatch):
     people = [{"first_name": "a", "last_name": str(i), "domain": "x.com", "email": f"a{i}@x.com"} for i in range(40)]
     out = gv.find_and_verify(people)
     assert len(out) == 40 and all(r for r in out)
+
+
+def test_two_word_company_names_do_not_collapse_to_initials():
+    from app.company_name_cleaner import clean_company_name as c
+    assert c("B & B Molded Products Inc", 2) == "B&B Molded"
+    assert c("A H Beck Foundation Co Inc", 2) == "AH Beck"
+    assert c("J & L WOOD PRODUCTS, INC.", 2) == "J&L WOOD"
+    assert c("J. Gibson McIlvain Company", 2) == "Gibson McIlvain"
+    assert c("Nickolas M. Savko & Sons, Inc.", 2) == "Nickolas Savko"
+    assert c("Z Contractors Inc.", 2) == "Z Contractors"
+    assert c("21st Century Plastics Inc", 2) == "21st Century"
+    assert c("Steel Dynamics, Inc.") == "Steel Dynamics"             # the 3-word path is not changed by the 2-word rule

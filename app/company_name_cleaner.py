@@ -57,6 +57,27 @@ OVERRIDES = {
 }
 
 
+_INITIAL = re.compile(r"^[A-Za-z]\.?$")
+
+
+def _fold_initials(words: list[str]) -> list[str]:
+    """For a 2-word cap, initials must not eat the budget ("B & B Molded Products" -> "B", "A H Beck Foundation" -> "A H", 2026-10-27).
+    A leading run of initials becomes one token ("B&B", "AH", "J&L"); a lone leading initial before two more words and a middle initial are dropped
+    ("J. Gibson McIlvain" -> "Gibson McIlvain", "Nickolas M. Savko" -> "Nickolas Savko"). "Z Contractors" and names that are only initials stay as they are."""
+    i = 0
+    while i < len(words) and (_INITIAL.match(words[i]) or words[i] == "&"):
+        i += 1
+    run, rest = words[:i], words[i:]
+    letters = [w.rstrip(".") for w in run if w != "&"]
+    if not rest:
+        return words
+    if len(letters) >= 2:
+        return [("&" if "&" in run else "").join(letters)] + [w for w in rest if not _INITIAL.match(w)] or words
+    if len(letters) == 1:
+        return [w for w in rest if not _INITIAL.match(w)] if len(rest) >= 2 else words
+    return [words[0]] + [w for w in words[1:] if not _INITIAL.match(w)] if len(words) > 2 else words
+
+
 def clean_company_name(name: str, max_words: int = MAX_WORDS) -> str:
     """Cleaned COMPANY merge value, at most max_words words. 3 is the TFP standard; the four quick-run campaigns (2210 to 2213) use 2 (Emmanuel, 2026-10-27)."""
     cap = max_words
@@ -87,6 +108,8 @@ def clean_company_name(name: str, max_words: int = MAX_WORDS) -> str:
 
     # first pass: drop trailing generic descriptors (keeps the meaningful part)
     words = c.split()
+    if cap < 3:
+        words = _fold_initials(words)
     while len(words) > cap and len(words) > min_words:
         if words[-1].lower().strip(",.&") in TRAILING_GENERIC:
             words.pop()

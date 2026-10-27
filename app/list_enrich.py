@@ -93,7 +93,7 @@ def judge(code: str, f: dict) -> tuple[bool, str, dict]:
 
 def enrich_company(code: str, domain: str, name: str, description: str = "", industry: str = "") -> dict:
     from . import client
-    words = tuple(client.profile().research_page_words)
+    words = tuple(client.profile().research_page_words) + ("contact", "find us", "visit")     # contact pages carry the address; 57 to 84 companies per list had no city without them
     site = jina.website_text_spec(domain, words, max_pages=3, max_chars=9000) or ""
     if len(site) < 200 and len(description or "") < 40:
         return {"gate_pass": False, "reason": "website unreadable and no description", "fields": {}}
@@ -180,3 +180,21 @@ def load(code: str, dry_run: bool = True) -> dict:
             if e in ids and e not in refused:
                 cur.execute("UPDATE contacts SET status='pushed', eb_campaign_id=%s, eb_lead_id=%s, updated_at=now() WHERE lower(email)=%s", (cid, ids[e], e))
     return {"dry_run": False, "campaign": cid, "sent": len(contacts), "attached": res.get("attached"), "refused": res.get("refused")}
+
+
+def refresh_company_names() -> dict:
+    """Re-send COMPANY (cleaned to 2 words with the current rules) for every lead already loaded into the four campaigns. Upsert with patch changes only what is sent."""
+    from .clients import emailbison
+    from .company_name_cleaner import clean_company_name
+    with db.cursor() as cur:
+        cur.execute("""SELECT c.email, c.first_name, c.last_name, coalesce(s.payload->>'name', c.company_domain) n FROM contacts c
+                       LEFT JOIN (SELECT DISTINCT ON (domain) domain, payload FROM staged_companies) s ON s.domain = c.company_domain
+                       WHERE c.status = 'pushed' AND c.eb_campaign_id = ANY(%s)""", (list(CAMPAIGNS.values()),))
+        rows = cur.fetchall()
+    leads = []
+    for r in rows:
+        company = clean_company_name(r["n"], COMPANY_WORDS)
+        leads.append({"email": r["email"], "company": company, "custom_variables": [{"name": "company", "value": company}]})
+    for i in range(0, len(leads), 100):
+        emailbison._send_retry("POST", "/api/leads/create-or-update/multiple", {"leads": leads[i:i + 100], "existing_lead_behavior": "patch"})
+    return {"leads": len(leads)}
