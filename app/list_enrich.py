@@ -19,6 +19,7 @@ MODEL = "openai/gpt-oss-120b"
 CAMPAIGNS = {"BM": 2210, "HG": 2211, "CN": 2212, "BR": 2213}
 MAX_PER_COMPANY = 4
 COMPANY_WORDS = 2
+PLANT_FALLBACK = "a couple of"
 
 COMMON = (
     "You read a company's website text and fill a small record used to personalise a cold email about truck-loading fall protection (flatbed trailers).\n"
@@ -29,12 +30,14 @@ COMMON = (
 )
 SPECIFIC = {
     "BM": (
-        '- product_mix: its 2 main stocked product groups, lowercase, joined with "and", for example "lumber and trusses", "roofing and siding", "rebar and wire mesh"'
+        '- product_mix: its 2 main stocked product groups, lowercase, joined with "and", for example "lumber and trusses", "roofing and siding", "rebar and wire mesh". '
+        "This is an easy inference: take it from the site, or from the company name, description and industry when the site does not say. Give your best answer, never null."
     ),
     "HG": (
         '- shipped_product: its main finished product, lowercase, PLURAL, 1 to 3 words, that reads correctly in "Your steel joists go out on flatbeds" '
-        "(examples: steel joists, precast vaults, truck trailers)\n"
-        "- plant_count: integer number of US and Canadian plants, or null"
+        "(examples: steel joists, precast vaults, truck trailers). This is an easy inference: take it from the site, or from the company name, description and "
+        "industry when the site does not say. Give your best answer, never null.\n"
+        "- plant_count: integer number of US and Canadian plants the site states, or null when it does not say"
     ),
     "CN": "",
     "BR": "",
@@ -81,23 +84,21 @@ def judge(code: str, f: dict) -> tuple[bool, str, dict]:
         sp, n = _words(f.get("shipped_product"), 1, 3), _int(f.get("plant_count"))
         if not sp:
             return False, "shipped product missing", {}
-        if not n:
-            return False, "plant count missing", {}
-        if n < 2:
-            return False, "single plant: variant 3 would read 'with 1 plants'", {}
-        return True, "ok", {"CITY": city, "SHIPPED_PRODUCT": sp, "PLANT_COUNT": str(n)}
+        # Variant 3 reads "with {PLANT_COUNT} plants shipping on flatbeds": an unknown or single-plant count falls back to "a couple of" (Emmanuel, 2026-10-27)
+        return True, "ok", {"CITY": city, "SHIPPED_PRODUCT": sp, "PLANT_COUNT": str(n) if n and n >= 2 else PLANT_FALLBACK}
     if code in ("CN", "BR"):
         return True, "ok", {"CITY": city}
     raise ValueError(code)
 
 
-def enrich_company(code: str, domain: str, name: str) -> dict:
+def enrich_company(code: str, domain: str, name: str, description: str = "", industry: str = "") -> dict:
     from . import client
     words = tuple(client.profile().research_page_words)
     site = jina.website_text_spec(domain, words, max_pages=3, max_chars=9000) or ""
-    if len(site) < 200:
-        return {"gate_pass": False, "reason": "website unreadable", "fields": {}}
-    user = f"Company: {name}\nDomain: {domain}\n\nWEBSITE TEXT:\n{site[:9000]}"
+    if len(site) < 200 and len(description or "") < 40:
+        return {"gate_pass": False, "reason": "website unreadable and no description", "fields": {}}
+    user = (f"Company: {name}\nDomain: {domain}\nIndustry: {industry or 'unknown'}\nDescription: {(description or '')[:600]}\n\n"
+            f"WEBSITE TEXT:\n{site[:9000] or '(could not be read)'}")
     f = llm.complete_json(MODEL, COMMON + SPECIFIC[code] + "\n" + FORMAT, user, 0.0, max_tokens=700, provider="research")
     if not isinstance(f, dict):
         return {"gate_pass": False, "reason": "model gave no usable answer", "fields": {}}
@@ -109,7 +110,8 @@ def run(code: str, workers: int = 12) -> dict:
     """Enrich every company that holds quick-run contacts for this list and has no stored verdict yet."""
     ensure_table()
     with db.cursor() as cur:
-        cur.execute("""SELECT c.company_domain d, max(coalesce(s.payload->>'name', c.company_domain)) n FROM contacts c
+        cur.execute("""SELECT c.company_domain d, max(coalesce(s.payload->>'name', c.company_domain)) n, max(coalesce(s.payload->>'description', '')) descr,
+                              max(coalesce(s.payload->>'industry', '')) ind FROM contacts c
                        LEFT JOIN staged_companies s ON s.domain = c.company_domain
                        WHERE c.status = 'quickrun_hold' AND c.source = %s
                          AND NOT EXISTS (SELECT 1 FROM list_enrichment e WHERE e.domain = c.company_domain AND e.list_code = %s)
@@ -118,7 +120,7 @@ def run(code: str, workers: int = 12) -> dict:
 
     def one(r):
         try:
-            return r["d"], enrich_company(code, r["d"], r["n"]), None
+            return r["d"], enrich_company(code, r["d"], r["n"], r["descr"], r["ind"]), None
         except Exception as exc:
             return r["d"], None, f"{type(exc).__name__}: {str(exc)[:100]}"
 

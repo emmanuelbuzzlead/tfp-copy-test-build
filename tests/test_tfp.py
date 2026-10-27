@@ -769,7 +769,8 @@ def test_list_enrich_has_no_fit_gate_only_checks_the_merge_fields_render():
     from app import list_enrich as L
     ok, _, merge = L.judge("HG", dict(city="Tulsa, OK", shipped_product="Steel Joists", plant_count="4"))
     assert ok and merge == {"CITY": "Tulsa", "SHIPPED_PRODUCT": "steel joists", "PLANT_COUNT": "4"}
-    assert not L.judge("HG", dict(city="Tulsa", shipped_product="steel joists", plant_count=1))[0]    # variant 3 says "with 1 plants"
+    assert L.judge("HG", dict(city="Tulsa", shipped_product="steel joists", plant_count=1))[2]["PLANT_COUNT"] == "a couple of"   # variant 3: "with a couple of plants"
+    assert L.judge("HG", dict(city="Tulsa", shipped_product="steel joists"))[2]["PLANT_COUNT"] == "a couple of"
     assert not L.judge("HG", dict(city=None, shipped_product="steel joists", plant_count=3))[0]
     assert L.judge("BM", dict(city="Boise", product_mix="lumber and trusses"))[0]
     assert not L.judge("BM", dict(city="Boise", product_mix="lumber"))[0]
