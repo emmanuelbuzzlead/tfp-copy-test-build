@@ -22,6 +22,7 @@ the leftover is logged. On 2026-10-27 TFP did not reproduce it at 150 people (0 
 from __future__ import annotations
 
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -36,6 +37,7 @@ BATCH = 16
 RETRY_BATCH = 8
 RETRY_PAUSE = 30
 WORKERS = 4
+_GATE = threading.Semaphore(int(os.getenv("GATEWAY_MAX_CONCURRENCY", "12")))     # all searches share one gateway; more than this at once brings 504s
 # A 50-person call with finder fallbacks is slow; the shared 90s read timeout cuts it off
 # mid-spend, which would bill the credits and discard the answer.
 _TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
@@ -63,6 +65,16 @@ def _headers() -> dict[str, str]:
 
 
 def _post(path: str, body: dict) -> dict:
+    try:
+        with _GATE:
+            return _post_inner(path, body)
+    except VendorError as e:
+        if e.status in (401, 402, 403):
+            raise VendorOutage(str(e)) from e
+        raise
+
+
+def _post_inner(path: str, body: dict) -> dict:
     try:
         return request("buzzlead-verify", "POST", f"{_base()}{path}", headers=_headers(),
                        json_body=body, timeout=_TIMEOUT) or {}

@@ -96,6 +96,13 @@ async def lifespan(_: FastAPI):
             except Exception as exc:
                 print(f"[startup] testrun lock release skipped: {exc}", flush=True)
             testrun.ensure_running()
+            # The four quick-run lists (campaigns 2210 to 2213) are scaled to their goals by the same service, with the same restart watchdog.
+            from . import list_scale
+            try:
+                list_scale.release_stale_lock()
+                list_scale.ensure_running()
+            except Exception as exc:
+                print(f"[startup] quick-run lists not started: {exc}", flush=True)
 
             def _watchdog() -> None:
                 import time as _t
@@ -105,6 +112,10 @@ async def lifespan(_: FastAPI):
                         testrun.ensure_running()
                     except Exception as exc:
                         print(f"[watchdog] scale-up check failed: {exc}", flush=True)
+                    try:
+                        list_scale.ensure_running()
+                    except Exception as exc:
+                        print(f"[watchdog] quick-run lists check failed: {exc}", flush=True)
             threading.Thread(target=_watchdog, daemon=True).start()
     yield
 

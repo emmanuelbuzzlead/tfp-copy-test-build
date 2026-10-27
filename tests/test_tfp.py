@@ -830,3 +830,30 @@ def test_gateway_verify_a_504_during_the_re_ask_does_not_lose_the_call(monkeypat
     people = [{"first_name": "a", "last_name": str(i), "domain": "x.com", "email": f"a{i}@x.com"} for i in range(10)]
     out = gv.find_and_verify(people)
     assert len(out) == 10 and not any(out)
+
+
+def test_quick_run_lists_job_stops_workers_when_the_held_pile_projects_past_the_goal(monkeypatch):
+    import threading
+    from app import list_scale as ls
+    monkeypatch.setattr(ls, "n_loaded", lambda code: 900)
+    monkeypatch.setattr(ls, "n_held", lambda code: 150)
+    assert ls._source_worker("BM", 1000, threading.Event()) == "enough"          # 900 + 150 * 0.85 is past 1,000
+    monkeypatch.setattr(ls, "n_held", lambda code: 0)
+    monkeypatch.setattr(ls, "_verifier_wait", lambda: None)
+    monkeypatch.setattr(ls, "companies_left", lambda code: 0)
+    monkeypatch.setattr(ls, "_top_up", lambda code: False)
+    assert ls._source_worker("BM", 1000, threading.Event()) == "exhausted"
+
+
+def test_quick_run_lists_work_left_ignores_stopped_and_finished_lists(monkeypatch):
+    from app import list_scale as ls
+    monkeypatch.setattr(ls, "targets", lambda: {"BM": {"target": 1000, "stuck_reason": None}, "HG": {"target": 1000, "stuck_reason": "out of companies"}})
+    monkeypatch.setattr(ls, "n_loaded", lambda code: {"BM": 1000, "HG": 300}[code])
+    assert ls.work_left() is False                                               # BM is at its goal, HG is stopped
+    monkeypatch.setattr(ls, "n_loaded", lambda code: 500)
+    assert ls.work_left() is True
+
+
+def test_gateway_calls_share_one_concurrency_cap():
+    from app.clients import gateway_verify as gv
+    assert gv._GATE._value >= 1

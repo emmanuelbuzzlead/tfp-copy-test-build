@@ -132,6 +132,21 @@ def _controls_html() -> str:
             'Copy-test campaigns are slower because copy is written for each lead, and adding to one tips the balance of the test.</p></div>')
 
 
+def _lists_html() -> str:
+    """The four quick-run lists (campaigns 2210 to 2213): leads loaded against the goal, contacts waiting, companies left, and why a list stopped if it did."""
+    try:
+        from . import list_scale
+        rows = list_scale.rows()
+    except Exception:
+        return ""
+    if not rows:
+        return ""
+    bars = "".join(_row(f'{r["name"]} ({r["campaign"]})', r["loaded"], r["target"],
+                        f'{r["loaded"]:,} of {r["target"]:,}' + (f' | stopped: {r["stuck"]}' if r["stuck"] else f' | {r["held"]:,} waiting, {r["companies_left"]:,} companies left'),
+                        "ok" if r["loaded"] >= r["target"] else "") for r in rows)
+    return f'<h2>Quick-run lists</h2><div class="panel">{bars}<p class="sub">Leads only, no copy to write. Each list searches its own verticals at the 100-employee floor and loads up to 4 people per company.</p></div>'
+
+
 def page_html() -> str:
     n = numbers()
     prof = client.profile()
@@ -211,6 +226,7 @@ def page_html() -> str:
         _card(f"{n['per_hour']:,}", "Leads an hour", "loaded in the last 60 minutes"),
     ])
     controls = _controls_html()
+    lists_html = _lists_html()
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TFP runway</title><style>{CSS}</style></head><body><div class="wrap">
 <h1>Truck Fall Prevention: scale-up runway</h1><div class="sub">Updated {now}. This page refreshes itself every minute.</div>
@@ -219,6 +235,7 @@ def page_html() -> str:
 <span class="pill {tone}">{escape(tone_txt)}</span></div>
 <div class="cards">{cards}</div>
 <h2>Leads by campaign</h2><div class="panel">{angle_rows}{og_note}</div>
+{lists_html}
 {controls}
 <h2>From companies to leads</h2><div class="panel">{funnel}
 <p class="sub">About {n['cps']:.1f} contacts come out of every company searched, so the {n['left']:,} companies left are worth roughly {int(n['left'] * n['cps']):,} contacts.</p></div>

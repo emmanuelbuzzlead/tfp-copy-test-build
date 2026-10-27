@@ -179,6 +179,8 @@ def load(code: str, dry_run: bool = True) -> dict:
             e = c["email"].lower()
             if e in ids and e not in refused:
                 cur.execute("UPDATE contacts SET status='pushed', eb_campaign_id=%s, eb_lead_id=%s, updated_at=now() WHERE lower(email)=%s", (cid, ids[e], e))
+        if refused:      # in another active sequence: they cannot go in, and must not stay counted as waiting
+            cur.execute("UPDATE contacts SET status='needs_review', drop_reason='in another active sequence', updated_at=now() WHERE lower(email) = ANY(%s)", ([r.lower() for r in refused],))
     return {"dry_run": False, "campaign": cid, "sent": len(contacts), "attached": res.get("attached"), "refused": res.get("refused")}
 
 
