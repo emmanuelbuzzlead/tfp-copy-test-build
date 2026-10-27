@@ -24,6 +24,7 @@ WORKERS = int(os.getenv("LIST_SCALE_WORKERS", "2"))                # search roun
 MAX_PER_COMPANY = 4
 PASS_RATE = 0.85                                                  # share of held contacts that end up loaded (measured 0.85 to 0.9)
 MIN_YIELD = float(os.getenv("SCALE_MIN_YIELD", "0.04"))           # companies with contacts per company searched, as for the main scale-up
+NEW_COMPANIES = int(os.getenv("LIST_SCALE_NEW_COMPANIES", "2500"))   # new companies asked for in one top-up
 TOP_UPS = 2                                                       # rounds of new-company sourcing per list before it is declared out of companies
 LISTS = {
     "HG": {"campaign": 2211, "name": "Heavy goods", "verticals": ["Machinery and Equipment Manufacturing", "General Manufacturing and Industrial Products",
@@ -240,12 +241,22 @@ def _top_up(code: str) -> bool:
             return companies_left(code) >= 40
         _topped[code] += 1
         v = LISTS[code]["verticals"][0]
-        _say(f"{LISTS[code]['name']}: stored companies are running out, sourcing new ones for {v}.")
+        # run_source sizes its search from the contacts asked for (1.2 contacts a company) and REUSES stored companies first, so a small ask finds nothing new
+        # (2026-10-27: 700 and 1,500 added zero for Construction and Building materials). Ask for more than the stored companies would give, so QuickEnrich is searched.
+        with db.cursor() as cur:
+            cur.execute("SELECT count(DISTINCT domain) n FROM staged_companies WHERE verdict = 'KEEP' AND vertical = %s", (v,))
+            stored = int(cur.fetchone()["n"])
+        ask = int((stored + NEW_COMPANIES) * 1.3)
+        before = stored
+        _say(f"{LISTS[code]['name']}: stored companies are running out ({stored:,} stored), sourcing about {NEW_COMPANIES:,} new ones for {v}.")
         try:
-            modes.run_source(client.profile(), v, 700, companies_only=True)
+            modes.run_source(client.profile(), v, ask, companies_only=True)
             funnel.refresh(force=True)
         except Exception as exc:
             _say(f"{LISTS[code]['name']}: sourcing new companies failed ({type(exc).__name__}: {str(exc)[:100]}).")
+        with db.cursor() as cur:
+            cur.execute("SELECT count(DISTINCT domain) n FROM staged_companies WHERE verdict = 'KEEP' AND vertical = %s", (v,))
+            _say(f"{LISTS[code]['name']}: {int(cur.fetchone()['n']) - before:,} new companies found; {companies_left(code):,} are ready to search.")
         return companies_left(code) >= 40
 
 
