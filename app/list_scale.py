@@ -29,7 +29,10 @@ TOP_UPS = 2                                                       # rounds of ne
 LISTS = {
     "HG": {"campaign": 2211, "name": "Heavy goods", "verticals": ["Machinery and Equipment Manufacturing", "General Manufacturing and Industrial Products",
                                                                   "Automotive and Transportation Equipment"]},
-    "BM": {"campaign": 2210, "name": "Building materials", "verticals": ["Building Materials and Products"]},
+    # Building materials: QuickEnrich holds few more of them (a 2,500-company top-up found 172, 2026-10-27), so once they are used up it takes the adjacent distribution
+    # verticals (Emmanuel, 2026-10-27: yes). The broad list may take the same ones; one company still goes to one campaign.
+    "BM": {"campaign": 2210, "name": "Building materials", "verticals": ["Building Materials and Products"],
+           "fallback": ["Wholesale and Distribution", "Other Industrial Shippers"]},
     "CN": {"campaign": 2212, "name": "Construction", "verticals": ["Construction and Infrastructure"]},
     # The broad angle test: warehousing first; when its stored and newly sourced companies run out it takes the other shipping verticals (Emmanuel, 2026-10-27:
     # "if nothing is found for the broad angle we can use other verticals since this is broad angle"). The other three lists keep their own verticals.

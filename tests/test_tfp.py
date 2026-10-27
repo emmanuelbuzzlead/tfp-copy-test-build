@@ -867,7 +867,9 @@ def test_broad_angle_takes_other_verticals_only_after_warehousing_runs_out(monke
     br = ls.verticals_for("BR")
     assert br[0] == "Logistics, Warehousing and 3PL" and "Wholesale and Distribution" in br
     assert not {"Machinery and Equipment Manufacturing", "Building Materials and Products", "Construction and Infrastructure"} & set(br)
-    assert ls.verticals_for("BM") == ["Building Materials and Products"]          # the other lists never fall back
+    assert ls.verticals_for("CN") == ["Construction and Infrastructure"]          # Heavy goods and Construction never fall back
+    bm = ls.verticals_for("BM")
+    assert bm[0] == "Building Materials and Products" and set(bm[1:]) == {"Wholesale and Distribution", "Other Industrial Shippers"}
 
 
 def test_quick_run_lists_job_starts_a_list_whose_stop_note_is_cleared_while_it_runs(monkeypatch):
