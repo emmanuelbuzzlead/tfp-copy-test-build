@@ -202,43 +202,46 @@ def refresh_company_names() -> dict:
     return {"leads": len(leads)}
 
 
-CITY_PROMPT = ("From these Google search results for a company, give the city of its headquarters or main US or Canadian site. "
-               "City name only, Title Case, no state or country. If the results do not make it clear, use null. "
-               'Reply with JSON only: {"city": "..." or null}')
+def _gateway_city(domains: list[str], steps: list[str]) -> dict[str, str]:
+    """City per domain from the BuzzLead company enrichment (POST /data/companies/enrich, 25 per call). Step "known" reads what BuzzLead already holds and is free."""
+    import httpx
+    from .clients import gateway_verify as gv
+    out: dict[str, str] = {}
+    for i in range(0, len(domains), 25):
+        chunk = domains[i:i + 25]
+        try:
+            r = httpx.post(gv._base() + "/data/companies/enrich", headers=gv._headers(), timeout=120,
+                           json={"companies": [{"domain": d} for d in chunk], "steps": steps})
+            r.raise_for_status()
+        except Exception:
+            continue
+        for c in (r.json() or {}).get("companies") or []:
+            city = ((c.get("fields") or {}).get("city") or "").strip()
+            if city:
+                out[(c.get("domain") or "").lower()] = city
+    return out
 
 
-def fill_cities(code: str, workers: int = 8) -> dict:
-    """Companies held only for a missing city: find it with a Google search (Serper) and re-run the same field checks on the stored enrichment."""
-    from .clients import serper
+def fill_cities(code: str) -> dict:
+    """Companies held only for a missing city: take it from BuzzLead's company record (free "known" step; Serper's key is rejected, 2026-10-27), then re-run the same
+    field checks on the stored enrichment."""
     with db.cursor() as cur:
         cur.execute("SELECT domain, fields FROM list_enrichment WHERE list_code = %s AND NOT gate_pass AND reason = 'city missing'", (code,))
         rows = cur.fetchall()
-        names = {}
-        if rows:
-            cur.execute("SELECT DISTINCT ON (domain) domain, payload->>'name' n FROM staged_companies WHERE domain = ANY(%s)", ([r["domain"] for r in rows],))
-            names = {r["domain"]: r["n"] for r in cur.fetchall()}
-
-    def one(r):
-        try:
-            text = serper.search_by_name(names.get(r["domain"]) or r["domain"], "headquarters address city", 6)
-            out = llm.complete_json(MODEL, CITY_PROMPT, f"Company: {names.get(r['domain'])} ({r['domain']})" + chr(10) + text[:3000], 0.0, max_tokens=100, provider="research")
-            return r, (out or {}).get("city") if isinstance(out, dict) else None
-        except Exception:
-            return r, None
-
+    cities = _gateway_city([r["domain"] for r in rows], ["known"])
     found = passed = 0
-    with ThreadPoolExecutor(workers) as pool:
-        for r, city in pool.map(one, rows):
-            if not city:
-                continue
-            f = r["fields"] if isinstance(r["fields"], dict) else json.loads(r["fields"])
-            f["city"] = city
-            ok, reason, merge = judge(code, f)
-            found += 1
-            passed += bool(ok)
-            if ok:
-                f["_merge"] = merge
-                with db.cursor() as cur:
-                    cur.execute("UPDATE list_enrichment SET fields = %s, gate_pass = TRUE, reason = 'city from web search', updated_at = now() WHERE domain = %s AND list_code = %s",
-                                (json.dumps(f), r["domain"], code))
+    for r in rows:
+        city = cities.get(r["domain"].lower())
+        if not city:
+            continue
+        f = r["fields"] if isinstance(r["fields"], dict) else json.loads(r["fields"])
+        f["city"] = city
+        ok, reason, merge = judge(code, f)
+        found += 1
+        passed += bool(ok)
+        if ok:
+            f["_merge"] = merge
+            with db.cursor() as cur:
+                cur.execute("UPDATE list_enrichment SET fields = %s, gate_pass = TRUE, reason = 'city from BuzzLead company record', updated_at = now() WHERE domain = %s AND list_code = %s",
+                            (json.dumps(f), r["domain"], code))
     return {"held": len(rows), "city_found": found, "now_usable": passed}
