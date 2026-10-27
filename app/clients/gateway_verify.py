@@ -12,8 +12,11 @@ the gateway's default chain, and finding is app/finders.py's job. Leaving them o
 spend AI Ark caps on a different chain than the agreed one.
 
 Measured 2026-10-22, 50 role addresses in one call: 37.5s end to end (about 7s fixed
-plus 0.6s per address). Batches are 50 per call (the endpoint's cap) and run in
-parallel, but kept modest: the gateway's concurrency ceiling is not documented.
+plus 0.6s per address). Batches are 16 per call, run in parallel but kept modest: the
+gateway's concurrency ceiling is not documented. A sister build measured 50-person calls
+returning empty answers for 92% of people under load (4 valid of 50) against 95%+ valid
+at 16, and an empty answer reads as "unknown", so it is re-asked once in small calls and
+the leftover is logged. On 2026-10-27 TFP did not reproduce it at 150 people (0 empty).
 """
 
 from __future__ import annotations
@@ -28,7 +31,8 @@ from .http import VendorError, VendorOutage, request
 
 DEFAULT_BASE = "https://research-615339619342.us-east4.run.app"
 PROVIDERS = ["millionverifier", "trykit", "bounceban"]
-BATCH = 50
+BATCH = 16
+RETRY_BATCH = 8
 WORKERS = 4
 # A 50-person call with finder fallbacks is slow; the shared 90s read timeout cuts it off
 # mid-spend, which would bill the credits and discard the answer.
@@ -92,7 +96,26 @@ def find_and_verify(people: list[dict]) -> list[dict]:
     chunks = [people[i:i + BATCH] for i in range(0, len(people), BATCH)]
     with ThreadPoolExecutor(max_workers=min(WORKERS, len(chunks))) as pool:
         out = list(pool.map(_find_chunk, chunks))
-    return [r for chunk in out for r in chunk]
+    results = [r for chunk in out for r in chunk]
+    # A person with no answer would read as "unknown" downstream, which is a lost contact
+    # rather than a verdict. Ask again once, in smaller calls, before accepting that.
+    missing = [i for i, r in enumerate(results) if not r]
+    if missing:
+        again = [missing[i:i + RETRY_BATCH] for i in range(0, len(missing), RETRY_BATCH)]
+        with ThreadPoolExecutor(max_workers=min(WORKERS, len(again))) as pool:
+            answers = list(pool.map(lambda idx: _find_chunk([people[i] for i in idx]), again))
+        for idx, ans in zip(again, answers):
+            for i, r in zip(idx, ans):
+                if r:
+                    results[i] = r
+        left = sum(1 for r in results if not r)
+        try:
+            from .. import db
+            db.log(None, "verify", f"gateway gave no answer for {len(missing)} of {len(people)}; {left} still empty after one re-ask",
+                   "warning" if left else "info")
+        except Exception:
+            pass
+    return results
 
 
 def verify_one(email: str, providers: list[str] | None = None) -> str:

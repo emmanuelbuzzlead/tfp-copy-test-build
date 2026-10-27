@@ -734,3 +734,21 @@ def test_contacts_are_only_assigned_to_angles_that_still_need_leads():
     import inspect
     src = inspect.getsource(wave1_fill.fill)
     assert "open_list = [a for a in angles if have_now[a] < targets[a]]" in src and "_assign(dom, open_list)" in src
+
+
+def test_gateway_verify_uses_small_batches_and_re_asks_people_the_gateway_skipped(monkeypatch):
+    from app.clients import gateway_verify as gv
+    asked = []
+
+    def fake(people):
+        asked.append(len(people))
+        # the first call of any size silently skips every other person; the re-ask answers all
+        if len(asked) == 1:
+            return [{"valid_email": p["email"]} if i % 2 == 0 else {} for i, p in enumerate(people)]
+        return [{"valid_email": p["email"]} for p in people]
+
+    monkeypatch.setattr(gv, "_find_chunk", fake)
+    people = [{"first_name": "a", "last_name": str(i), "domain": "x.com", "email": f"a{i}@x.com"} for i in range(40)]
+    out = gv.find_and_verify(people)
+    assert gv.BATCH == 16 and max(asked[:3]) <= 16
+    assert all(r for r in out) and [r["valid_email"] for r in out] == [p["email"] for p in people]
