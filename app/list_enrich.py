@@ -200,3 +200,45 @@ def refresh_company_names() -> dict:
     for i in range(0, len(leads), 100):
         emailbison._send_retry("POST", "/api/leads/create-or-update/multiple", {"leads": leads[i:i + 100], "existing_lead_behavior": "patch"})
     return {"leads": len(leads)}
+
+
+CITY_PROMPT = ("From these Google search results for a company, give the city of its headquarters or main US or Canadian site. "
+               "City name only, Title Case, no state or country. If the results do not make it clear, use null. "
+               'Reply with JSON only: {"city": "..." or null}')
+
+
+def fill_cities(code: str, workers: int = 8) -> dict:
+    """Companies held only for a missing city: find it with a Google search (Serper) and re-run the same field checks on the stored enrichment."""
+    from .clients import serper
+    with db.cursor() as cur:
+        cur.execute("SELECT domain, fields FROM list_enrichment WHERE list_code = %s AND NOT gate_pass AND reason = 'city missing'", (code,))
+        rows = cur.fetchall()
+        names = {}
+        if rows:
+            cur.execute("SELECT DISTINCT ON (domain) domain, payload->>'name' n FROM staged_companies WHERE domain = ANY(%s)", ([r["domain"] for r in rows],))
+            names = {r["domain"]: r["n"] for r in cur.fetchall()}
+
+    def one(r):
+        try:
+            text = serper.search_by_name(names.get(r["domain"]) or r["domain"], "headquarters address city", 6)
+            out = llm.complete_json(MODEL, CITY_PROMPT, f"Company: {names.get(r['domain'])} ({r['domain']})" + chr(10) + text[:3000], 0.0, max_tokens=100, provider="research")
+            return r, (out or {}).get("city") if isinstance(out, dict) else None
+        except Exception:
+            return r, None
+
+    found = passed = 0
+    with ThreadPoolExecutor(workers) as pool:
+        for r, city in pool.map(one, rows):
+            if not city:
+                continue
+            f = r["fields"] if isinstance(r["fields"], dict) else json.loads(r["fields"])
+            f["city"] = city
+            ok, reason, merge = judge(code, f)
+            found += 1
+            passed += bool(ok)
+            if ok:
+                f["_merge"] = merge
+                with db.cursor() as cur:
+                    cur.execute("UPDATE list_enrichment SET fields = %s, gate_pass = TRUE, reason = 'city from web search', updated_at = now() WHERE domain = %s AND list_code = %s",
+                                (json.dumps(f), r["domain"], code))
+    return {"held": len(rows), "city_found": found, "now_usable": passed}
