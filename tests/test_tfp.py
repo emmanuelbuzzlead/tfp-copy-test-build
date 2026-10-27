@@ -909,3 +909,12 @@ def test_quick_run_lists_job_starts_a_list_whose_stop_note_is_cleared_while_it_r
     monkeypatch.setattr(ls, "_list_loop", fake_loop)
     assert ls.run()["status"] == "finished"
     assert sorted(state["started"]) == ["BR", "HG"]
+
+
+def test_a_yield_collapse_pauses_only_the_list_that_tripped():
+    import time
+    from app import list_scale as ls
+    assert set(ls._yield_pause) == set(ls.LISTS)
+    ls._yield_pause["BM"]["t"] = time.time() + 600
+    assert ls._yield_pause["CN"]["t"] < time.time()                # Construction is not held back by Building materials
+    ls._yield_pause["BM"]["t"] = 0.0

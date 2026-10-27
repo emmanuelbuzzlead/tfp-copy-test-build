@@ -25,6 +25,7 @@ MAX_PER_COMPANY = 4
 PASS_RATE = 0.85                                                  # share of held contacts that end up loaded (measured 0.85 to 0.9)
 MIN_YIELD = float(os.getenv("SCALE_MIN_YIELD", "0.04"))           # companies with contacts per company searched, as for the main scale-up
 NEW_COMPANIES = int(os.getenv("LIST_SCALE_NEW_COMPANIES", "2500"))   # new companies asked for in one top-up
+FALLBACK_BELOW = 150                                              # a list with fallback verticals widens when its own have fewer companies than this (the tail is weak: 1 in 76 gave contacts)
 TOP_UPS = 2                                                       # rounds of new-company sourcing per list before it is declared out of companies
 LISTS = {
     "HG": {"campaign": 2211, "name": "Heavy goods", "verticals": ["Machinery and Equipment Manufacturing", "General Manufacturing and Industrial Products",
@@ -45,7 +46,8 @@ DEFAULT_TARGET = 1000
 _claim_lock = threading.Lock()
 _claimed: set[str] = set()
 _state_lock = threading.Lock()
-_paused_until = {"t": 0.0, "alerted": False, "trips": 0}
+_paused_until = {"alerted": False}                                  # verification down: every list waits
+_yield_pause = {code: {"t": 0.0, "trips": 0} for code in LISTS}       # a yield collapse pauses only the list that tripped
 _topped = {code: 0 for code in LISTS}
 _top_lock = {code: threading.Lock() for code in LISTS}
 _thread: threading.Thread | None = None
@@ -88,7 +90,7 @@ def verticals_for(code: str) -> list[str]:
     spec = LISTS[code]
     primary = spec["verticals"]
     fb = spec.get("fallback") or []
-    return primary + fb if fb and _left_in(primary) < 40 else primary
+    return primary + fb if fb and _left_in(primary) < FALLBACK_BELOW else primary
 
 
 def n_loaded(code: str) -> int:
@@ -226,13 +228,13 @@ def _source_round(code: str) -> tuple[int, int] | None:
             cur.execute("""UPDATE staged_companies s SET found_at = NULL WHERE s.domain = ANY(%s)
                            AND NOT EXISTS (SELECT 1 FROM contacts c WHERE c.company_domain = s.domain)""", (domains,))
         with _state_lock:
-            _paused_until["trips"] += 1
-            minutes = min(15 * 2 ** (_paused_until["trips"] - 1), 240)
-            _paused_until["t"] = time.time() + minutes * 60
+            _yield_pause[code]["trips"] += 1
+            minutes = min(15 * 2 ** (_yield_pause[code]["trips"] - 1), 240)
+            _yield_pause[code]["t"] = time.time() + minutes * 60
         _say(f":rotating_light: Quick-run yield collapsed on {LISTS[code]['name']}: {len(by_dom)} of {len(fresh)} companies gave contacts (floor {MIN_YIELD:.0%}). "
              f"The companies were put back. Paused {minutes} minutes.")
         return len(fresh), 0
-    _paused_until["trips"] = 0
+    _yield_pause[code]["trips"] = 0
     return len(fresh), len(keep)
 
 
@@ -269,7 +271,7 @@ def _source_worker(code: str, target: int, stop: threading.Event) -> str:
     while not stop.is_set():
         if n_loaded(code) + n_held(code) * PASS_RATE >= target:
             return "enough"
-        wait = _paused_until["t"] - time.time()
+        wait = _yield_pause[code]["t"] - time.time()
         if wait > 0:
             time.sleep(min(wait, 60)); continue
         _verifier_wait()
