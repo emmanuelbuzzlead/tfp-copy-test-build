@@ -269,7 +269,7 @@ Subject: {Winter|Slow season|Before spring rush}
 
 {{first_name}}, {winter is|the winter months are|this time of year is} {the slow stretch|the quiet stretch|the slower season} for {most yards|a lot of yards|most branch yards}. {It's also the easiest time|It's also the best window|That also makes it the easiest time} to put fall protection in {before spring loads stack up.|before the spring rush hits.|before spring volume picks back up.}
 
-{Worth sizing it|Want to size it|Would it make sense to size it} for {{company_name}}'s {{city}} yard {while it's quiet?|before things pick up?|during the slow weeks?}
+{Open to a short video of it in action?|Want me to send a 30-second video of it?|Mind if I send over a quick video?}
 ```
 
 **BM-E1-V3 (Top of the bundles)**
@@ -279,6 +279,8 @@ Subject: {Bundles|Stacked loads|Top of the bundles}
 {{first_name}}, {strapping|tying down|securing} a full load of {{product_mix}} puts {your guys|your yard crew|your drivers} on top of the bundles, {not just the deck.|not just on the deck.|well above the deck.}
 
 {That's higher than most people think.|That's a lot higher than it looks from the ground.|It's higher up than most folks realize.} {What catches them|What's there to catch them|What stops the fall} if they slip at your {{city}} yard?
+
+{Open to a short video of it in action?|Want me to send a 30-second video of it?|Mind if I send over a quick video?}
 ```
 
 **BM-E1-V4 (Branch or corporate)**
@@ -288,6 +290,8 @@ Subject: {Branch|Branch or corporate|Who decides this}
 {{first_name}}, at {{company_name}}, {is fall protection for the yard decided|is the call on yard fall protection made|does yard fall protection come down} at each branch or at corporate?
 
 {Asking because|Reason I ask is|I ask because} we keep drivers tied off while they strap loads, and {I'd rather talk to the right person first.|I'd like to reach the right person first.|I want to make sure I'm talking to the right person.}
+
+{Open to a short video of it in action?|Want me to send a 30-second video of it?|Mind if I send over a quick video?}
 ```
 
 **BM-E1-V5 (Green yard crews)**
@@ -297,6 +301,8 @@ Subject: {Yard crew|First month|Green yard guys}
 {{first_name}}, {yard crews turn over fast|yard crews change a lot|turnover on yard crews is high}, and {the guy climbing a load in his first month|the guy in his first month on the yard|whoever is in his first month climbing loads} is {the one most likely to slip.|usually the one who slips.|the most likely to go over the side.}
 
 {What keeps him tied off|Does anything keep him tied off|Is anything keeping him tied off} at {{company_name}}'s yards besides experience he doesn't have yet?
+
+{Want me to send a short video of how crews stay tied off?|Open to a short video of it in action?|Mind if I send over a quick video?}
 ```
 
 **BM-E2-V1 (The fine is the cheap part)**
@@ -308,9 +314,9 @@ Subject: {Yard crew|First month|Green yard guys}
 
 **BM-E2-V2 (3-photo layout sketch)**
 ```
-{{first_name}}, {one easy way to see if this fits|an easy way to check if this fits|a simple way to see if this makes sense for} {{company_name}}'s yards: {your team sends|someone sends us|you send} 3 photos of a loading area.
+{{first_name}}, {circling back on fall protection for|following up on fall protection at|a quick follow-up on fall protection for} {{company_name}}'s yards.
 
-{We send back a sketch of the setup that fits your trailers.|We mark up which setup fits your trailers and send it back.|We send back a layout showing what would work for your trailers.} {Want me to send the details?|Should I send over how it works?|Want the details?}
+{Should I send the short clip?|Want to see a 1-minute video of it on a flatbed?|Reply "video" and I'll send it over.}
 ```
 
 **BM-E2-V3 (Routing)**
@@ -392,9 +398,9 @@ Your {{shipped_product}} {go out on flatbeds the same way.|ship the same way, on
 
 **HG-E2-V2 (3-photo layout sketch)**
 ```
-{{first_name}}, {one easy way to see if this fits|an easy way to check if this fits|a simple way to see if this makes sense for} {{company_name}}'s plants: {your team sends|someone sends us|you send} 3 photos of a shipping area.
+{{first_name}}, {circling back on fall protection for|following up on fall protection at|a quick follow-up on fall protection for} {{company_name}}'s plants.
 
-{We send back a sketch of the setup that fits your trailers.|We mark up which setup fits your trailers and send it back.|We send back a layout showing what would work for your trailers.} {Want me to send the details?|Should I send over how it works?|Want the details?}
+{Should I send the short clip?|Want to see a 1-minute video of it on a flatbed?|Reply "video" and I'll send it over.}
 ```
 
 **HG-E2-V3 (Routing)**
@@ -476,9 +482,9 @@ Subject: {Mud|Muddy decks|Returns caked in mud}
 
 **CN-E2-V2 (3-photo layout sketch)**
 ```
-{{first_name}}, {one easy way to see if this fits|an easy way to check if this fits|a simple way to see if this makes sense for} {{company_name}}'s branches: {your team sends|someone sends us|you send} 3 photos of a branch yard.
+{{first_name}}, {circling back on fall protection for|following up on fall protection at|a quick follow-up on fall protection for} {{company_name}}'s branches.
 
-{We send back a sketch of the setup that fits your trailers.|We mark up which setup fits your trailers and send it back.|We send back a layout showing what would work for your trailers.} {Want me to send the details?|Should I send over how it works?|Want the details?}
+{Should I send the short clip?|Want to see a 1-minute video of it on a flatbed?|Reply "video" and I'll send it over.}
 ```
 
 **CN-E2-V3 (Routing)**
@@ -512,7 +518,7 @@ Subject: {Docks|Warehouse program|OSHA warehouse program}
 
 {{first_name}}, OSHA {extended|re-upped|reissued} its warehouse inspection program in August {and stretched it to 2031.|and it runs through 2031.|for five more years, through 2031.} {Falls are on the inspection checklist.|Falls are one of the hazards on the checklist.|Slips, trips and falls are on the checklist.}
 
-{What keeps someone tied off|How is someone kept tied off|What protects someone} when they're up on a trailer at {{company_name}}'s {{city}} site?
+{Open to a short video of it in action?|Want me to send a 30-second video of it?|Mind if I send over a quick video?}
 ```
 
 **BR-E1-V2 (Winter on the deck)**
@@ -523,7 +529,7 @@ Subject: {Ice|Icy decks|Tarping in January}
 
 {We build fall protection for that spot.|We build fall protection for exactly that spot.|That's the spot our fall protection is built for.} {Our side rolling panel sets up in about 40 seconds, so crews actually use it in the cold.|Our side rolling panel goes up in about 40 seconds, so it's used even in the cold.|Our side rolling panel takes about 40 seconds, so it doesn't sit idle in the cold.}
 
-{Worth a layout sketch from 3 photos of your loading area?|Want a layout sketch from 3 photos of your loading area?|Should we sketch a layout from 3 photos of your loading area?}
+{Open to a short video of it in action?|Want me to send a 30-second video of it?|Mind if I send over a quick video?}
 ```
 
 **BR-E1-V3 (2027 budget)**
@@ -532,9 +538,9 @@ Subject: {Budget|2027 budget|2027 safety budget}
 
 {{first_name}}, {plenty of safety teams|a lot of safety teams|many safety teams} lock next year's capital requests before the holidays.
 
-{If loading-area fall protection isn't in|If fall protection for your loading areas isn't in|If loading-area fall protection hasn't made it into} {{company_name}}'s 2027 budget yet, a layout sketch {would give you a real number.|gives you a real number to put in.|would put a real number on it.} {Your team sends 3 photos, we send back the setup and a price range.|Send us 3 photos and we'll send back the setup and a price range.|Your team shares 3 photos and we return the setup with a price range.}
+If loading-area fall protection isn't in {{company_name}}'s 2027 budget yet, it helps to see what it looks like before the numbers lock.
 
-{Worth doing before the budget closes?|Want to do that before budgets close?|Worth it before the budget locks?}
+{Open to a short video of it in action?|Want me to send a 30-second video of it?|Mind if I send over a quick video?}
 ```
 
 **BR-E2-V1 (The fine is the cheap part)**
@@ -546,9 +552,9 @@ Subject: {Budget|2027 budget|2027 safety budget}
 
 **BR-E2-V2 (3-photo layout sketch)**
 ```
-{{first_name}}, {one easy way to see if this fits|an easy way to check if this fits|a simple way to see if this makes sense for} {{company_name}}'s sites: {your team sends|someone sends us|you send} 3 photos of a loading area.
+{{first_name}}, {circling back on fall protection for|following up on fall protection at|a quick follow-up on fall protection for} {{company_name}}'s sites.
 
-{We send back a sketch of the setup that fits your trailers.|We mark up which setup fits your trailers and send it back.|We send back a layout showing what would work for your trailers.} {Want me to send the details?|Should I send over how it works?|Want the details?}
+{Should I send the short clip?|Want to see a 1-minute video of it on a flatbed?|Reply "video" and I'll send it over.}
 ```
 
 **BR-E2-V3 (Routing)**
