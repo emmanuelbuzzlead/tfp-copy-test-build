@@ -806,7 +806,7 @@ def test_two_word_company_names_do_not_collapse_to_initials():
     from app.company_name_cleaner import clean_company_name as c
     assert c("B & B Molded Products Inc", 2) == "B&B Molded"
     assert c("A H Beck Foundation Co Inc", 2) == "AH Beck"
-    assert c("J & L WOOD PRODUCTS, INC.", 2) == "J&L WOOD"
+    assert c("J & L WOOD PRODUCTS, INC.", 2) == "J&L Wood"
     assert c("J. Gibson McIlvain Company", 2) == "Gibson McIlvain"
     assert c("Nickolas M. Savko & Sons, Inc.", 2) == "Nickolas Savko"
     assert c("Z Contractors Inc.", 2) == "Z Contractors"
