@@ -17,7 +17,9 @@ database = "tfp"
 model_campaign_id = 2103
 step_wait_days = 3
 
-# ICP (spec section 2): 11 to 200 employees, US.
+# ICP (icp.md, onboarding): anyone who ships with flatbeds, conestogas or dry vans, at a site where its own people load or unload trucks. There is no fixed
+# size in the TFP spec: the floor started at 500+ for AI Ark and 51-500 for Eaton lookalikes (TFP-Top6-Sourcing-Verify-SPEC.md), moved to 200, then to 100 on
+# 2026-10-15. (This line used to say "11 to 200 employees", which is Lumion's ICP, left over from the template.)
 employee_min = 100
 employee_max = 1000000
 default_mode = "copy-test"
