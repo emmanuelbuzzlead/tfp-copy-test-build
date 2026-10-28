@@ -918,3 +918,25 @@ def test_a_yield_collapse_pauses_only_the_list_that_tripped():
     ls._yield_pause["BM"]["t"] = time.time() + 600
     assert ls._yield_pause["CN"]["t"] < time.time()                # Construction is not held back by Building materials
     ls._yield_pause["BM"]["t"] = 0.0
+
+
+def test_quickenrich_company_search_follows_the_cursor_past_10000_and_counts_only_new(monkeypatch):
+    from app.clients import quickenrich as q
+    calls = []
+
+    def fake(vendor, method, url, headers=None, json_body=None, **kw):
+        calls.append(json_body)
+        n = len(calls)
+        if n > 3:
+            return {"data": [], "meta": {"has_more": False}}
+        assert ("page" in json_body) == (n == 1) and ("cursor" in json_body) == (n > 1)     # page 1, then the cursor, never an offset page
+        rows = [{"url": f"c{n}-{i}.com", "company_name": "x"} for i in range(100)]
+        return {"data": rows, "meta": {"next_cursor": f"cur{n}", "has_more": True}}
+
+    monkeypatch.setattr(q, "request", fake)
+    monkeypatch.setattr(q, "map_industries", lambda inds: ["Construction"])
+    monkeypatch.setattr(q, "_headers", lambda: {})
+    monkeypatch.setattr(q, "map_employee_range", lambda a, b: ["100 - 249"])
+    stored = {f"c1-{i}.com" for i in range(100)} | {f"c2-{i}.com" for i in range(50)}
+    out = q.find_companies(industries=["Construction"], employee_min=100, limit=120, exclude=stored)
+    assert len(out) == 120 and not {c["domain"] for c in out} & stored

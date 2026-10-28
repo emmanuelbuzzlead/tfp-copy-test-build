@@ -348,12 +348,19 @@ def map_employee_range(emp_min: int | None, emp_max: int | None) -> list[str]:
 
 
 def find_companies(industries: list[str] | None = None, employee_min: int | None = None,
-                   employee_max: int | None = None, limit: int = 100) -> list[dict]:
+                   employee_max: int | None = None, limit: int = 100,
+                   exclude: set[str] | None = None) -> list[dict]:
     """POST /api/companies/company-finder -> normalized company dicts (domain, name,
-    industry, employees, description). US only (country_code always "US" -- this
-    app's clients are all US-only TAM, and the lookup's ISO codes aren't threaded
-    through Vertical). Returns [] rather than raising on no usable filters -- an
-    unfiltered query would page the whole dataset."""
+    industry, employees, description), in the client's countries. Returns [] rather than
+    raising on no usable filters -- an unfiltered query would page the whole dataset.
+
+    Pages with the cursor (meta.next_cursor): offset pages stop at the first 10,000 results
+    (422 "Offset pagination is limited to the first 10,000 results"), so a vertical with more
+    than 10,000 matches found "nothing new" forever once we held the first 10,000 (TFP
+    Construction, 2026-10-28: 28,545 matches, 9,836 stored, top-up found 0). `exclude`
+    (domains already stored) is skipped and does not count toward `limit`, so `limit` means
+    NEW companies."""
+    exclude = exclude or set()
     mapped_ind = map_industries(industries or [])
     ranges = map_employee_range(employee_min, employee_max)
     try:
@@ -371,19 +378,23 @@ def find_companies(industries: list[str] | None = None, employee_min: int | None
 
     out: list[dict] = []
     seen: set[str] = set()
-    page = 1
-    per_page = min(100, max(10, limit))
+    cursor: str | None = None
+    per_page = 100 if exclude else min(100, max(10, limit))
     while len(out) < limit:
+        nav = {"cursor": cursor} if cursor else {"page": 1}
         body = request("quickenrich", "POST",
                        f"{settings.quickenrich_base}/api/companies/company-finder",
                        headers=_headers(),
-                       json_body={**payload, "page": page, "per_page": per_page})
+                       json_body={**payload, **nav, "per_page": per_page})
         rows = (body.get("data") or []) if isinstance(body, dict) else []
         if not rows:
             break
         for rec in rows:
             domain = (rec.get("url") or rec.get("final_email_domain") or "").lower().replace("www.", "")
             if not domain or domain in seen:
+                continue
+            if domain in exclude:
+                seen.add(domain)
                 continue
             seen.add(domain)
             out.append({
@@ -396,7 +407,7 @@ def find_companies(industries: list[str] | None = None, employee_min: int | None
             if len(out) >= limit:
                 break
         meta = (body.get("meta") or {}) if isinstance(body, dict) else {}
-        if page >= int(meta.get("last_page") or 1):
+        cursor = meta.get("next_cursor")
+        if not cursor or meta.get("has_more") is False:
             break
-        page += 1
     return out

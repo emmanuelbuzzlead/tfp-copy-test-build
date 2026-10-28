@@ -927,7 +927,8 @@ def find(vertical: Vertical, run_id: str, target_contacts: int | None = None,
             return quickenrich.find_companies(industries=vertical.industries,
                                               employee_min=vertical.employee_min,
                                               employee_max=vertical.employee_max,
-                                              limit=max(need_kept - len(kept), 0) * 3)
+                                              limit=max(need_kept - len(kept), 0) * 3,
+                                              exclude=set(seen_domains))     # count only NEW companies; stored ones are walked past
 
         def _lo_companies():
             if not finders_uses_leadocean():
