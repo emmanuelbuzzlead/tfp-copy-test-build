@@ -965,3 +965,30 @@ def test_connections_of_finished_threads_are_closed(monkeypatch):
     db._local.conn = None
     db.connect()                                   # opening a new one sweeps the finished thread's connection
     assert made[0].closed
+
+
+def test_pool_threads_hand_their_connection_back_after_each_use(monkeypatch):
+    import types
+    from concurrent.futures import ThreadPoolExecutor
+    from app import db
+
+    class FakeCur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    class FakeConn:
+        closed = False
+        def cursor(self): return FakeCur()
+        def close(self): self.closed = True
+
+    made = []
+    monkeypatch.setattr(db.psycopg, "connect", lambda *a, **k: made.append(FakeConn()) or made[-1])
+    monkeypatch.setattr(db, "settings", types.SimpleNamespace(database_url="postgres://x"))
+
+    def use():
+        with db.cursor():
+            pass
+        return made[-1].closed
+
+    with ThreadPoolExecutor(2) as ex:
+        assert all(ex.map(lambda _: use(), range(4)))            # every pool use ends with its connection closed

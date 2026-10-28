@@ -591,8 +591,14 @@ def cursor() -> Iterator[psycopg.Cursor]:
     for attempt in range(_CURSOR_RETRIES):
         try:
             conn = connect()
-            with conn.cursor() as cur:
-                yield cur
+            try:
+                with conn.cursor() as cur:
+                    yield cur
+            finally:
+                # Worker-pool threads hand their connection back after every use: dozens of pool threads (enrichment, contact
+                # search, verification) each kept one open and filled the server (2026-10-28). Long-lived threads keep theirs.
+                if threading.current_thread().name.startswith("ThreadPoolExecutor"):
+                    _drop_thread_conn()
             return
         except (psycopg.OperationalError, psycopg.InterfaceError) as exc:
             # Covers both failure modes seen against Railway's public TCP proxy from
