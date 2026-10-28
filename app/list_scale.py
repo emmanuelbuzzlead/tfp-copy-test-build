@@ -35,10 +35,12 @@ LISTS = {
     "BM": {"campaign": 2210, "name": "Building materials", "verticals": ["Building Materials and Products"],
            "fallback": ["Wholesale and Distribution", "Other Industrial Shippers"]},
     "CN": {"campaign": 2212, "name": "Construction", "verticals": ["Construction and Infrastructure"]},
-    # The broad angle test: warehousing first; when its stored and newly sourced companies run out it takes the other shipping verticals (Emmanuel, 2026-10-27:
-    # "if nothing is found for the broad angle we can use other verticals since this is broad angle"). The other three lists keep their own verticals.
-    "BR": {"campaign": 2213, "name": "Warehousing", "verticals": ["Logistics, Warehousing and 3PL"],
-           "fallback": ["Wholesale and Distribution", "Other Industrial Shippers", "Food and Beverage Production", "Trucking and Freight Carriers",
+    # The broad angle test: its own verticals are logistics, trucking and plastics, and new companies are sourced for all three in turn (Emmanuel, 2026-10-28:
+    # "trucking, logistics, plastics"); while they are low it also takes the other shipping verticals' stored companies (2026-10-27: "if nothing is found for
+    # the broad angle we can use other verticals since this is broad angle"). The other three lists keep their own verticals.
+    "BR": {"campaign": 2213, "name": "Warehousing", "verticals": ["Logistics, Warehousing and 3PL", "Trucking and Freight Carriers", "Plastics Manufacturing"],
+           "source": ["Logistics, Warehousing and 3PL", "Trucking and Freight Carriers", "Plastics Manufacturing"],
+           "fallback": ["Wholesale and Distribution", "Other Industrial Shippers", "Food and Beverage Production",
                         "Consumer and Medical Products Manufacturing", "Defense and Aerospace Manufacturing", "Mining, Oil, Gas and Utilities", "Agriculture and Forestry"]},
 }
 DEFAULT_TARGET = 1000
@@ -238,14 +240,29 @@ def _source_round(code: str) -> tuple[int, int] | None:
     return len(fresh), len(keep)
 
 
+def _sources(code: str) -> list[str]:
+    """The verticals new companies are sourced for, in turn: the list's 'source' ones, else its main vertical."""
+    return LISTS[code].get("source") or LISTS[code]["verticals"][:1]
+
+
+def _needs_new(code: str) -> bool:
+    """A list with its own source verticals sources new companies as soon as those run low (the broad angle should grow in trucking, logistics and
+    plastics, not only drain the fallback); the others only when everything they can search is used up."""
+    if LISTS[code].get("source"):
+        return _left_in(LISTS[code]["verticals"]) < FALLBACK_BELOW
+    return companies_left(code) < 40
+
+
 def _top_up(code: str) -> bool:
-    """Source new companies for the list's main vertical when the stored ones run out. True when it ran."""
+    """Source new companies for the list's source verticals (one per call, in turn) when the stored ones run low. True when companies are ready to search."""
     from . import client, funnel, modes
     with _top_lock[code]:
-        if _topped[code] >= (1 if LISTS[code].get("fallback") else TOP_UPS) or companies_left(code) >= 40:
+        src = _sources(code)
+        limit = len(src) if LISTS[code].get("source") else (1 if LISTS[code].get("fallback") else TOP_UPS)
+        if _topped[code] >= limit or not _needs_new(code):
             return companies_left(code) >= 40
+        v = src[_topped[code] % len(src)]
         _topped[code] += 1
-        v = LISTS[code]["verticals"][0]
         # run_source sizes its search from the contacts asked for (1.2 contacts a company) and REUSES stored companies first, so a small ask finds nothing new
         # (2026-10-27: 700 and 1,500 added zero for Construction and Building materials). Ask for more than the stored companies would give, so QuickEnrich is searched.
         with db.cursor() as cur:
@@ -275,7 +292,7 @@ def _source_worker(code: str, target: int, stop: threading.Event) -> str:
         if wait > 0:
             time.sleep(min(wait, 60)); continue
         _verifier_wait()
-        if companies_left(code) < 40 and not _top_up(code) and companies_left(code) == 0:
+        if _needs_new(code) and not _top_up(code) and companies_left(code) == 0:
             return "exhausted"
         try:
             r = _source_round(code)

@@ -861,11 +861,12 @@ def test_gateway_calls_share_one_concurrency_cap():
 
 def test_broad_angle_takes_other_verticals_only_after_warehousing_runs_out(monkeypatch):
     from app import list_scale as ls
+    own = ["Logistics, Warehousing and 3PL", "Trucking and Freight Carriers", "Plastics Manufacturing"]
     monkeypatch.setattr(ls, "_left_in", lambda verticals: 500)
-    assert ls.verticals_for("BR") == ["Logistics, Warehousing and 3PL"]
+    assert ls.verticals_for("BR") == own
     monkeypatch.setattr(ls, "_left_in", lambda verticals: 0)
     br = ls.verticals_for("BR")
-    assert br[0] == "Logistics, Warehousing and 3PL" and "Wholesale and Distribution" in br
+    assert br[:3] == own and "Wholesale and Distribution" in br
     assert not {"Machinery and Equipment Manufacturing", "Building Materials and Products", "Construction and Infrastructure"} & set(br)
     assert ls.verticals_for("CN") == ["Construction and Infrastructure"]          # Heavy goods and Construction never fall back
     bm = ls.verticals_for("BM")
@@ -1024,3 +1025,36 @@ def test_nested_cursor_on_a_pool_thread_keeps_the_outer_connection_open(monkeypa
     with ThreadPoolExecutor(1) as ex:
         outer_open, closed_after = ex.submit(use).result()
     assert outer_open and closed_after
+
+
+def test_broad_angle_sources_logistics_trucking_and_plastics_in_turn(monkeypatch):
+    # Emmanuel 2026-10-28: "trucking, logistics, plastics". New companies for each of the three, once each, while its own verticals are low
+    import types
+    from app import list_scale as ls, client, funnel, modes
+    asked = []
+    monkeypatch.setattr(ls, "_topped", {c: 0 for c in ls.LISTS})
+    monkeypatch.setattr(ls, "_left_in", lambda verticals: 10)
+    monkeypatch.setattr(ls, "_say", lambda text: None)
+    monkeypatch.setattr(client, "profile", lambda: None)
+    monkeypatch.setattr(modes, "run_source", lambda profile, v, ask, companies_only: asked.append(v))
+    monkeypatch.setattr(funnel, "refresh", lambda force=False: None)
+
+    class Cur:
+        def execute(self, *a): pass
+        def fetchone(self): return {"n": 0}
+
+    class Ctx:
+        def __enter__(self): return Cur()
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(ls.db, "cursor", lambda: Ctx())
+    for _ in range(5):
+        ls._top_up("BR")
+    assert asked == ["Logistics, Warehousing and 3PL", "Trucking and Freight Carriers", "Plastics Manufacturing"]
+
+
+def test_plastics_is_declared_for_sourcing_but_not_a_main_vertical():
+    import tomllib, pathlib
+    cfg = tomllib.loads((pathlib.Path(__file__).resolve().parents[1] / "clients" / "tfp" / "client.toml").read_text(encoding="utf-8"))
+    defs = {d["name"]: d for d in cfg["vertical_defs"]}
+    assert defs["Plastics Manufacturing"]["industries"] == ["Plastics Manufacturing"]
+    assert "Plastics Manufacturing" not in cfg["verticals"]
