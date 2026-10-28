@@ -591,13 +591,17 @@ def cursor() -> Iterator[psycopg.Cursor]:
     for attempt in range(_CURSOR_RETRIES):
         try:
             conn = connect()
+            _local.depth = getattr(_local, "depth", 0) + 1
             try:
                 with conn.cursor() as cur:
                     yield cur
             finally:
                 # Worker-pool threads hand their connection back after every use: dozens of pool threads (enrichment, contact
                 # search, verification) each kept one open and filled the server (2026-10-28). Long-lived threads keep theirs.
-                if threading.current_thread().name.startswith("ThreadPoolExecutor"):
+                # Only the outermost cursor hands it back: a nested one (list_scale.tag_bank -> verticals_for) closed the connection
+                # the outer cursor was still using, and the two lists with fallback verticals crashed silently every 30s (2026-10-28).
+                _local.depth -= 1
+                if _local.depth == 0 and threading.current_thread().name.startswith("ThreadPoolExecutor"):
                     _drop_thread_conn()
             return
         except (psycopg.OperationalError, psycopg.InterfaceError) as exc:

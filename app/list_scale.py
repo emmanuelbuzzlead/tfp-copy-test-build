@@ -338,6 +338,22 @@ def _list_loop(code: str, target: int, holder: str) -> None:
     ex.shutdown(wait=False)
 
 
+_crash_said: set[str] = set()
+
+
+def _list_loop_safe(code: str, target: int, holder: str) -> None:
+    """A list that crashes is restarted within 30s by run(); say why, or it restarts and crashes unseen (BM and BR, 2026-10-28). Slack once per list."""
+    try:
+        _list_loop(code, target, holder)
+    except Exception as exc:
+        import traceback
+        print(f"[list_scale] {code} crashed: {type(exc).__name__}: {exc}\n{traceback.format_exc()[-1500:]}", flush=True)
+        if code not in _crash_said:
+            _crash_said.add(code)
+            _say(f":warning: {LISTS[code]['name']} crashed ({type(exc).__name__}: {str(exc)[:150]}); retrying every 30 seconds.")
+        time.sleep(30)
+
+
 def run() -> dict:
     """Runs every list that is short of its goal and not stopped, and keeps checking: a list whose goal is raised or whose stop note is cleared starts within a minute."""
     holder = uuid.uuid4().hex[:10]
@@ -358,7 +374,7 @@ def run() -> dict:
                         _say("Quick-run lists started: " + ", ".join(f"{LISTS[c]['name']} {n_loaded(c)}/{tg}" for c, tg in new.items()) + ".")
                         started_any = True
                     for c, tg in new.items():
-                        running[c] = pool.submit(_list_loop, c, tg, holder)
+                        running[c] = pool.submit(_list_loop_safe, c, tg, holder)
                 if not any(not f.done() for f in running.values()) and not new:
                     break
                 time.sleep(30)

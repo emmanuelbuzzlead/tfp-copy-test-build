@@ -992,3 +992,35 @@ def test_pool_threads_hand_their_connection_back_after_each_use(monkeypatch):
 
     with ThreadPoolExecutor(2) as ex:
         assert all(ex.map(lambda _: use(), range(4)))            # every pool use ends with its connection closed
+
+
+def test_nested_cursor_on_a_pool_thread_keeps_the_outer_connection_open(monkeypatch):
+    # list_scale.tag_bank calls verticals_for inside its own cursor; the inner cursor closed the shared connection and BM and BR
+    # crashed silently every 30 seconds (2026-10-28)
+    import types
+    from concurrent.futures import ThreadPoolExecutor
+    from app import db
+
+    class FakeCur:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    class FakeConn:
+        closed = False
+        def cursor(self): return FakeCur()
+        def close(self): self.closed = True
+
+    made = []
+    monkeypatch.setattr(db.psycopg, "connect", lambda *a, **k: made.append(FakeConn()) or made[-1])
+    monkeypatch.setattr(db, "settings", types.SimpleNamespace(database_url="postgres://x"))
+
+    def use():
+        with db.cursor():
+            with db.cursor():
+                pass
+            outer_open = not made[-1].closed
+        return outer_open, made[-1].closed
+
+    with ThreadPoolExecutor(1) as ex:
+        outer_open, closed_after = ex.submit(use).result()
+    assert outer_open and closed_after

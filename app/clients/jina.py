@@ -14,20 +14,73 @@ import httpx
 
 READER = "https://r.jina.ai/"
 
+# 2026-10-28: the Jina key was stopped (HTTP 401 "Invalid API key") and every read returned "" with nothing logged, so quick-run
+# enrichment judged companies "website unreadable" (177 Building materials, 134 broad angle). Same order as the ProQ/MN build:
+# (1) the BuzzLead gateway's own site crawl (POST /research/site-crawl, not Jina), (2) Jina, without the key once it is rejected.
+_CRAWL_TIMEOUT = httpx.Timeout(connect=8.0, read=30.0, write=15.0, pool=10.0)
+_key_rejected = False
 
-def website_text(domain: str, max_chars: int = 6000) -> str:
-    key = os.getenv("JINA_API_KEY")
-    headers = {"Accept": "text/plain"}
-    if key:
-        headers["Authorization"] = f"Bearer {key}"
+
+def _crawl_text(domain: str, max_chars: int) -> str:
+    """The gateway's site crawl: a few sales-relevant pages as one markdown digest. '' on any failure."""
+    from . import gateway_verify as gv
+    from ..config import settings
+    if not settings.buzzlead_api_key or os.getenv("SITE_READER_GATEWAY", "true").strip().lower() in {"0", "false", "no", "off"}:
+        return ""
+    body = {"url": f"https://{domain}", "max_pages": 2 if max_chars <= 3000 else 3, "max_markdown_chars": max_chars, "find_linkedin": False}
     for attempt in range(2):
         try:
-            r = httpx.get(f"{READER}https://{domain}", headers=headers, timeout=40, follow_redirects=True)
+            r = httpx.post(gv._base() + "/research/site-crawl", json=body, headers=gv._headers(), timeout=_CRAWL_TIMEOUT)
+        except httpx.TimeoutException:
+            return ""
+        except httpx.HTTPError:
+            time.sleep(1.0)
+            continue
+        if r.status_code == 200:
+            try:
+                text = ((r.json() or {}).get("site_markdown") or "").strip()
+            except ValueError:
+                return ""
+            return text[:max_chars] if len(text) > 80 else ""
+        if r.status_code in (429, 502, 503, 504):
+            time.sleep(1.0)
+            continue
+        break
+    return ""
+
+
+def _jina_headers(extra: dict | None = None) -> dict:
+    headers = {"Accept": "text/plain", **(extra or {})}
+    key = os.getenv("JINA_API_KEY")
+    if key and not _key_rejected:
+        headers["Authorization"] = f"Bearer {key}"
+    return headers
+
+
+def _key_was_rejected(status: int) -> bool:
+    """True (once) when the key is refused: the caller retries keyless, and every later call goes keyless."""
+    global _key_rejected
+    if status in (401, 403) and os.getenv("JINA_API_KEY") and not _key_rejected:
+        _key_rejected = True
+        print(f"[warn] jina: JINA_API_KEY is rejected (HTTP {status}); reading without a key from now on", flush=True)
+        return True
+    return False
+
+
+def website_text(domain: str, max_chars: int = 6000) -> str:
+    text = _crawl_text(domain, max_chars)
+    if text:
+        return text
+    for attempt in range(3):
+        try:
+            r = httpx.get(f"{READER}https://{domain}", headers=_jina_headers(), timeout=40, follow_redirects=True)
         except httpx.HTTPError:
             time.sleep(1.5)
             continue
         if r.status_code == 200 and len(r.text.strip()) > 80:
             return r.text.strip()[:max_chars]
+        if _key_was_rejected(r.status_code):
+            continue
         if r.status_code in (429, 500, 502, 503, 504):
             time.sleep(2 ** attempt)
             continue
@@ -139,22 +192,19 @@ def _signal_trim(text: str, head: int, extra: int) -> str:
 
 
 def _fetch_url(url: str, max_chars: int, links_summary: bool = False) -> str:
-    key = os.getenv("JINA_API_KEY")
-    headers = {"Accept": "text/plain"}
-    if key:
-        headers["Authorization"] = f"Bearer {key}"
-    if links_summary:
-        # Appends every link on the page, menus included. Without it a site whose navigation is script-built yields no links at all
-        # (tonsore.com, hsti.info and azyogaacademy.com all returned zero candidate pages).
-        headers["X-With-Links-Summary"] = "true"
-    for attempt in range(2):
+    # Appends every link on the page, menus included. Without it a site whose navigation is script-built yields no links at all
+    # (tonsore.com, hsti.info and azyogaacademy.com all returned zero candidate pages).
+    extra = {"X-With-Links-Summary": "true"} if links_summary else None
+    for attempt in range(3):
         try:
-            r = httpx.get(f"{READER}{url}", headers=headers, timeout=40, follow_redirects=True)
+            r = httpx.get(f"{READER}{url}", headers=_jina_headers(extra), timeout=40, follow_redirects=True)
         except httpx.HTTPError:
             time.sleep(1.0)
             continue
         if r.status_code == 200 and len(r.text.strip()) > 80:
             return r.text.strip()[:max_chars]
+        if _key_was_rejected(r.status_code):
+            continue
         if r.status_code in (429, 500, 502, 503, 504):
             time.sleep(2 ** attempt)
             continue
@@ -205,7 +255,10 @@ def website_text_spec(domain: str, words: tuple[str, ...], max_pages: int = 5, m
     """Home page plus up to `max_pages` internal pages whose path or link text matches `words`, safety first, then locations, then products,
     then the rest. Every page is marked '=== PAGE: <url> ===' and lines that repeat across pages (nav, footer) are dropped after their first
     appearance. Total length is capped at `max_chars`, keeping the home page and the safety, locations and products pages first.
-    Returns "" when the home page cannot be read."""
+    Returns "" when the home page cannot be read. The BuzzLead gateway crawl is tried first (it picks the sales-relevant pages itself)."""
+    crawled = _crawl_text(domain, max_chars)
+    if crawled:
+        return crawled
     raw = _fetch_url(f"https://{domain}", 80000, links_summary=True)
     if not raw:
         return ""
