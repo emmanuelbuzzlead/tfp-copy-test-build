@@ -539,13 +539,34 @@ def connect() -> psycopg.Connection:
     conn = getattr(_local, "conn", None)
     if conn is not None and not conn.closed:
         return conn
+    _close_dead_thread_conns()
     conn = psycopg.connect(
         url, row_factory=dict_row, autocommit=True,
         connect_timeout=20, keepalives=1, keepalives_idle=30,
         keepalives_interval=10, keepalives_count=5,
     )
     _local.conn = conn
+    with _conns_lock:
+        _thread_conns[threading.get_ident()] = (threading.current_thread(), conn)
     return conn
+
+
+# One connection per thread, and a thread that ends never closed its own: short-lived worker pools (enrichment every
+# minute, contact search every chunk) left their connections open until the server ran out (98 of 100 used, 89 idle,
+# 2026-10-28, "too many clients already"). Every new connection first closes the ones whose thread has finished.
+_thread_conns: dict = {}
+_conns_lock = threading.Lock()
+
+
+def _close_dead_thread_conns() -> None:
+    with _conns_lock:
+        for tid, (t, c) in list(_thread_conns.items()):
+            if not t.is_alive() or c.closed:
+                try:
+                    c.close()
+                except Exception:
+                    pass
+                _thread_conns.pop(tid, None)
 
 
 def _drop_thread_conn() -> None:

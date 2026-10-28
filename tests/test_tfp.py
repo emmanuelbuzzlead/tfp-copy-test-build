@@ -940,3 +940,28 @@ def test_quickenrich_company_search_follows_the_cursor_past_10000_and_counts_onl
     stored = {f"c1-{i}.com" for i in range(100)} | {f"c2-{i}.com" for i in range(50)}
     out = q.find_companies(industries=["Construction"], employee_min=100, limit=120, exclude=stored)
     assert len(out) == 120 and not {c["domain"] for c in out} & stored
+
+
+def test_connections_of_finished_threads_are_closed(monkeypatch):
+    import threading
+    from app import db
+
+    class FakeConn:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    made = []
+
+    def fake_connect(*a, **k):
+        c = FakeConn(); made.append(c); return c
+
+    monkeypatch.setattr(db.psycopg, "connect", fake_connect)
+    import types
+    monkeypatch.setattr(db, "settings", types.SimpleNamespace(database_url="postgres://x"))
+    t = threading.Thread(target=db.connect); t.start(); t.join()
+    assert made and not made[0].closed
+    db._local.conn = None
+    db.connect()                                   # opening a new one sweeps the finished thread's connection
+    assert made[0].closed
