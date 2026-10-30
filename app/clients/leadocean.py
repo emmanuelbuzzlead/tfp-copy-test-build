@@ -54,17 +54,26 @@ def _enum_search(name: str, q: str) -> list[str]:
     return values
 
 
+def _words(label: str) -> list[str]:
+    return [t for t in "".join(ch.lower() if ch.isalnum() else " " for ch in label).split() if t not in ("and", "of", "the")]
+
+
 def map_industries(wanted: list[str]) -> list[str]:
     out: list[str] = []
     for w in wanted or []:
         w = (w or "").strip()
         if not w:
             continue
-        matches = _enum_search("industry", w)
+        # Lead Ocean writes a label's commas as semicolons ("Wholesale Hardware; Plumbing; Heating Equipment").
+        matches = _enum_search("industry", w) or (_enum_search("industry", w.replace(", ", "; ")) if ", " in w else [])
         if not matches:
+            # One word at a time, keeping only labels that share at least two words with the one asked for: "Wholesale" alone
+            # matched every wholesale label and filled TFP building materials with beer, seafood and casket distributors (2026-10-30).
+            want = set(_words(w))
             for word in w.split():
-                matches = _enum_search("industry", word)
-                if matches:
+                hits = [m for m in _enum_search("industry", word) if len(want & set(_words(m))) >= min(2, len(want))]
+                if hits:
+                    matches = hits
                     break
         out.extend(matches)
     seen: set[str] = set()

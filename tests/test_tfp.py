@@ -1088,3 +1088,15 @@ def test_building_materials_50_99_is_declared_with_its_own_size():
     assert b.name == "Building Materials and Products" and b.employee_min == 100
     for name in ("Building Products Adjacent", "Building Materials 50-99"):
         assert name not in cfg["verticals"]
+
+
+def test_lead_ocean_industry_match_never_widens_to_a_bare_word(monkeypatch):
+    # "Wholesale Hardware, Plumbing, Heating Equipment" fell back to "Wholesale" and pulled beer, seafood and casket distributors (2026-10-30)
+    from app.clients import leadocean as lo
+    enum = ["Wholesale", "Wholesale Building Materials", "Wholesale Food and Beverage", "Wholesale Hardware; Plumbing; Heating Equipment",
+            "Glass Product Manufacturing", "Computer Hardware"]
+    monkeypatch.setattr(lo, "_enum_search", lambda name, q: [v for v in enum if q.lower() in v.lower()])
+    assert lo.map_industries(["Wholesale Hardware, Plumbing, Heating Equipment"]) == ["Wholesale Hardware; Plumbing; Heating Equipment"]
+    assert lo.map_industries(["Wholesale Hardware Plumbing Supply"]) == ["Wholesale Hardware; Plumbing; Heating Equipment"]
+    assert lo.map_industries(["Wholesale Widgets Nowhere"]) == []
+    assert lo.map_industries(["Glass Product Manufacturing"]) == ["Glass Product Manufacturing"]
