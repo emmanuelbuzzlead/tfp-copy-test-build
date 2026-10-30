@@ -32,7 +32,9 @@ LISTS = {
                                                                   "Automotive and Transportation Equipment"]},
     # Building materials: QuickEnrich holds few more of them (a 2,500-company top-up found 172, 2026-10-27), so once they are used up it takes the adjacent distribution
     # verticals (Emmanuel, 2026-10-27: yes). The broad list may take the same ones; one company still goes to one campaign.
-    "BM": {"campaign": 2210, "name": "Building materials", "verticals": ["Building Materials and Products"],
+    # 2026-10-30 (Emmanuel: options 1 and 2): new companies from the closest labels never pulled, and from its own labels at 50-99 staff.
+    "BM": {"campaign": 2210, "name": "Building materials", "verticals": ["Building Materials and Products", "Building Products Adjacent", "Building Materials 50-99"],
+           "source": ["Building Products Adjacent", "Building Materials 50-99"],
            "fallback": ["Wholesale and Distribution", "Other Industrial Shippers"]},
     "CN": {"campaign": 2212, "name": "Construction", "verticals": ["Construction and Infrastructure"]},
     # The broad angle test: its own verticals are logistics, trucking and plastics, and new companies are sourced for all three in turn (Emmanuel, 2026-10-28:

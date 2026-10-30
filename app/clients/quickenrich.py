@@ -325,7 +325,9 @@ def map_industries(wanted: list[str]) -> list[str]:
     return [v for v in out if not (v in seen or seen.add(v))]
 
 
-def map_employee_range(emp_min: int | None, emp_max: int | None) -> list[str]:
+def map_employee_range(emp_min: int | None, emp_max: int | None, strict_min: bool = False) -> list[str]:
+    """The headcount bands that overlap the range. `strict_min` keeps only bands that start at or above emp_min, so a 50 floor never takes
+    the "20 - 99" band's 20-person companies."""
     if emp_min is None and emp_max is None:
         return []
     lo, hi = emp_min or 0, emp_max or 10**9
@@ -342,14 +344,14 @@ def map_employee_range(emp_min: int | None, emp_max: int | None) -> list[str]:
                 r_lo = r_hi = int(txt)
         except ValueError:
             continue
-        if r_lo <= hi and r_hi >= lo:
+        if r_lo <= hi and r_hi >= lo and not (strict_min and r_lo < lo):
             out.append(label)
     return out
 
 
 def find_companies(industries: list[str] | None = None, employee_min: int | None = None,
                    employee_max: int | None = None, limit: int = 100,
-                   exclude: set[str] | None = None) -> list[dict]:
+                   exclude: set[str] | None = None, strict_min: bool = False) -> list[dict]:
     """POST /api/companies/company-finder -> normalized company dicts (domain, name,
     industry, employees, description), in the client's countries. Returns [] rather than
     raising on no usable filters -- an unfiltered query would page the whole dataset.
@@ -362,7 +364,9 @@ def find_companies(industries: list[str] | None = None, employee_min: int | None
     NEW companies."""
     exclude = exclude or set()
     mapped_ind = map_industries(industries or [])
-    ranges = map_employee_range(employee_min, employee_max)
+    ranges = map_employee_range(employee_min, employee_max, strict_min)
+    if strict_min and not ranges:
+        return []                    # no band fits inside the range: searching without a size filter would return every size
     try:
         from .. import client as _client
         countries = list(_client.profile().countries) or ["US"]

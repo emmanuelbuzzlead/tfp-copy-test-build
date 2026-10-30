@@ -841,6 +841,7 @@ def test_quick_run_lists_job_stops_workers_when_the_held_pile_projects_past_the_
     monkeypatch.setattr(ls, "n_held", lambda code: 0)
     monkeypatch.setattr(ls, "_verifier_wait", lambda: None)
     monkeypatch.setattr(ls, "companies_left", lambda code: 0)
+    monkeypatch.setattr(ls, "_left_in", lambda verticals: 0)
     monkeypatch.setattr(ls, "_top_up", lambda code: False)
     assert ls._source_worker("BM", 1000, threading.Event()) == "exhausted"
 
@@ -870,7 +871,8 @@ def test_broad_angle_takes_other_verticals_only_after_warehousing_runs_out(monke
     assert not {"Machinery and Equipment Manufacturing", "Building Materials and Products", "Construction and Infrastructure"} & set(br)
     assert ls.verticals_for("CN") == ["Construction and Infrastructure"]          # Heavy goods and Construction never fall back
     bm = ls.verticals_for("BM")
-    assert bm[0] == "Building Materials and Products" and set(bm[1:]) == {"Wholesale and Distribution", "Other Industrial Shippers"}
+    assert bm[:3] == ["Building Materials and Products", "Building Products Adjacent", "Building Materials 50-99"]
+    assert set(bm[3:]) == {"Wholesale and Distribution", "Other Industrial Shippers"}
 
 
 def test_quick_run_lists_job_starts_a_list_whose_stop_note_is_cleared_while_it_runs(monkeypatch):
@@ -937,7 +939,7 @@ def test_quickenrich_company_search_follows_the_cursor_past_10000_and_counts_onl
     monkeypatch.setattr(q, "request", fake)
     monkeypatch.setattr(q, "map_industries", lambda inds: ["Construction"])
     monkeypatch.setattr(q, "_headers", lambda: {})
-    monkeypatch.setattr(q, "map_employee_range", lambda a, b: ["100 - 249"])
+    monkeypatch.setattr(q, "map_employee_range", lambda a, b, strict=False: ["100 - 249"])
     stored = {f"c1-{i}.com" for i in range(100)} | {f"c2-{i}.com" for i in range(50)}
     out = q.find_companies(industries=["Construction"], employee_min=100, limit=120, exclude=stored)
     assert len(out) == 120 and not {c["domain"] for c in out} & stored
@@ -1058,3 +1060,31 @@ def test_plastics_is_declared_for_sourcing_but_not_a_main_vertical():
     defs = {d["name"]: d for d in cfg["vertical_defs"]}
     assert defs["Plastics Manufacturing"]["industries"] == ["Plastics Manufacturing"]
     assert "Plastics Manufacturing" not in cfg["verticals"]
+
+
+
+def test_fifty_floor_never_takes_the_20_to_99_band(monkeypatch):
+    from app.clients import quickenrich as qe
+    monkeypatch.setitem(qe._LOOKUP_CACHE, "employee-ranges", ["1 - 19", "20 - 99", "100 - 499", "500 - 999", "1000+"])
+    assert qe.map_employee_range(50, 99) == ["20 - 99"]                    # the old behaviour: overlapping band taken whole
+    assert qe.map_employee_range(50, 99, strict_min=True) == []
+    assert qe.map_employee_range(100, None, strict_min=True) == ["100 - 499", "500 - 999", "1000+"]
+    called = []
+    monkeypatch.setattr(qe, "map_industries", lambda w: ["Building Materials"])
+    monkeypatch.setattr(qe, "request", lambda *a, **k: called.append(1) or {})
+    assert qe.find_companies(["Building Materials"], 50, 99, strict_min=True) == [] and not called   # no unfiltered search
+
+
+def test_building_materials_50_99_is_declared_with_its_own_size():
+    import tomllib, pathlib, types
+    from app import modes
+    cfg = tomllib.loads((pathlib.Path(__file__).resolve().parents[1] / "clients" / "tfp" / "client.toml").read_text(encoding="utf-8"))
+    prof = types.SimpleNamespace(vertical_defs=tuple(cfg["vertical_defs"]), employee_min=100, employee_max=1000000)
+    v = modes.vertical_from_description("Building Materials 50-99", None, prof)
+    assert (v.employee_min, v.employee_max, v.exact_headcount) == (50, 99, True)
+    a = modes.vertical_from_description("Building Products Adjacent", None, prof)
+    assert (a.employee_min, a.exact_headcount) == (100, False) and "HVAC and Refrigeration Equipment Manufacturing" in a.industries
+    b = modes.vertical_from_description("Building Materials and Products", None, prof)
+    assert b.name == "Building Materials and Products" and b.employee_min == 100
+    for name in ("Building Products Adjacent", "Building Materials 50-99"):
+        assert name not in cfg["verticals"]

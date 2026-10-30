@@ -337,9 +337,10 @@ def vertical_from_description(text: str, run_id: str | None = None, profile=None
                 return Vertical(
                     name=d["name"], rationale=d.get("rationale") or f"declared by the client: {d['name']}",
                     industries=list(d.get("industries") or []), keywords=list(d.get("keywords") or []),
-                    employee_min=profile.employee_min, employee_max=profile.employee_max,
+                    employee_min=int(d.get("employee_min") or profile.employee_min),
+                    employee_max=int(d.get("employee_max") or profile.employee_max),
                     disqualifiers=list(d.get("disqualifiers") or []), naics=[],
-                    seed_campaign="declared: " + d["name"])
+                    seed_campaign="declared: " + d["name"], exact_headcount=bool(d.get("exact_headcount")))
     # Measure labels for THIS vertical first. Without it the model picks the nearest
     # entry in a generic menu, and the nearest is not the same as the right one.
     unavailable = None

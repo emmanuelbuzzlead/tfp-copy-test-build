@@ -152,6 +152,9 @@ class Vertical:
     naics: list[str] = field(default_factory=list)
     seed_campaign: str = ""
     seed_industry: str = ""
+    # A declared vertical whose size floor falls inside a provider's headcount band (QuickEnrich only has "20 - 99") skips that provider
+    # rather than take the whole band (TFP building materials at 50-99, 2026-10-30). Lead Ocean filters on exact headcount.
+    exact_headcount: bool = False
 
     @classmethod
     def from_json(cls, raw: dict) -> "Vertical":

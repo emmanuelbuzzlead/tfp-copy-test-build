@@ -928,7 +928,8 @@ def find(vertical: Vertical, run_id: str, target_contacts: int | None = None,
                                               employee_min=vertical.employee_min,
                                               employee_max=vertical.employee_max,
                                               limit=max(need_kept - len(kept), 0) * 3,
-                                              exclude=set(seen_domains))     # count only NEW companies; stored ones are walked past
+                                              exclude=set(seen_domains),     # count only NEW companies; stored ones are walked past
+                                              strict_min=getattr(vertical, "exact_headcount", False))
 
         def _lo_companies():
             if not finders_uses_leadocean():

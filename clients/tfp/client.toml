@@ -176,6 +176,24 @@ keywords = ["warehouse", "distribution center", "third party logistics", "cross 
 
 # The broad angle's own source only (app/list_scale.py, Emmanuel 2026-10-28: "trucking, logistics, plastics"). Deliberately NOT in
 # `verticals` above, so the main scale-up and the test runs never pick it. Plastics companies already stored stay under General Manufacturing.
+# Building materials' own source only (app/list_scale.py, Emmanuel 2026-10-30: options 1 and 2). Its own labels were used up at 100+
+# (QuickEnrich 4,961, all stored). Neither is in `verticals`, so no other job picks them.
+# 1: the closest labels never pulled, 365 companies at 100+ (products that leave on flatbeds: rooftop units, transformers, glass racks, pipe).
+[[vertical_defs]]
+name = "Building Products Adjacent"
+industries = ["HVAC and Refrigeration Equipment Manufacturing", "Electrical Equipment Manufacturing", "Glass Product Manufacturing", "Wholesale Hardware, Plumbing, Heating Equipment"]
+keywords = ["hvac equipment", "rooftop units", "switchgear", "transformers", "glass fabricator", "plumbing supply", "pipe and fittings"]
+
+# 2: building materials' own labels at 50-99 staff. QuickEnrich only has a "20 - 99" band, so exact_headcount skips it; Lead Ocean
+# filters on exact headcount (measured 2026-10-30: 1,258 at 50-99, 409 not stored).
+[[vertical_defs]]
+name = "Building Materials 50-99"
+industries = ["Building Materials", "Wholesale Building Materials", "Wood Product Manufacturing", "Glass, Ceramics and Concrete Manufacturing", "Construction Hardware Manufacturing", "Paper and Forest Product Manufacturing", "Retail Building Materials and Garden Equipment"]
+keywords = ["lumber", "building products", "roofing", "drywall", "precast concrete", "supply yard", "millwork", "plywood"]
+employee_min = 50
+employee_max = 99
+exact_headcount = true
+
 [[vertical_defs]]
 name = "Plastics Manufacturing"
 industries = ["Plastics Manufacturing"]
